@@ -17,18 +17,16 @@ class Database:
         return sqlite3.connect(path)
 
     def insert_data(self, tableName: str, data: pd.DataFrame) -> None:
-        data: dict = pd.DataFrame.to_dict(data)
-
-        colNames: str = ', '.join(data.keys())
-        values = data.values()
-        placeholder: str = ', '.join(['?'] * len(values))
+        colNames: str = ', '.join(data.columns)
+        placeholder: str = ', '.join(['?'] * len(data.columns))
+        values = [tuple(row) for row in data.to_numpy()]
 
         with self.connect(self.db_path) as conn:
             query = f'''
             INSERT INTO {tableName} ({colNames}) VALUES ({placeholder})
             '''
 
-            conn.execute(query)
+            conn.executemany(query, values)
 
     def retrieve_data(self, tableName: str, colNames: list, restrictions: str=None, batch_size: int=None) -> pd.DataFrame:
         colNames: str = ', '.join(colNames)

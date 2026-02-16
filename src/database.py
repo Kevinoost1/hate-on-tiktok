@@ -1,4 +1,7 @@
 import sqlite3
+import pandas as pd
+
+
 ENV_PATH = r'C:\Users\2mrwm\Documents\phd\project_classification\env\database.env'
 
 class Database:
@@ -18,12 +21,24 @@ class Database:
         values = data.values()
         placeholder: str = ', '.join(['?'] * len(values))
 
-        query = f'''
-        INSERT INTO {tableName} ({colNames}) VALUES ({placeholder})
-        '''
         with self.connect(self.db_path) as conn:
+            query = f'''
+            INSERT INTO {tableName} ({colNames}) VALUES ({placeholder})
+            '''
+
             conn.execute(query)
 
+    def retrieve_batch(self, batch_size: int, tableName: str, colNames: list, restrictions: str) -> pd.DataFrame:
+        colNames: str = ', '.join(colNames)
+
+        with self.connect(self.db_path) as conn:
+            query: str = f'''
+            SELECT {colNames} FROM {tableName}
+            WHERE {restrictions}
+            LIMIT {batch_size}
+            '''
+
+            return pd.read_sql(query, conn)
 
 
 

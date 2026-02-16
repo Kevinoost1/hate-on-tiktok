@@ -15,13 +15,15 @@ class preprocess:
         self.dbPath: str = ''
         self.batchSize: int = 99
         self.device: str = 'cuda'
+
         self.translationModel: str = 'facebook_translator'
         self.translationLanguage: str = 'nl_XX'
+        self.translationBatchSize: int = 16
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.dbPath)
 
-    def _insertData(self, df: pd.DataFrame, table: str, idColumn: str, *columns: str):
+    def _insertData(self, df: pd.DataFrame, table: str, idColumn: str, *columns: str) -> (str, list):
         columnsToUpdate = ", ".join(f"{col} = ?" for col in columns)
 
         query = f"""
@@ -54,12 +56,12 @@ class preprocess:
             FROM subtitles
             """
             rawSubtitles = pd.read_sql(query, db)
-            rawSubtitles['transcript'] = rawSubtitles['content'].apply(self.textMatching)
+            rawSubtitles['transcript'] = rawSubtitles['content'].apply(self.matchText)
             db.cursor.executemany(self._insertData(rawSubtitles, 'transcript_classification', 'id', 'transcript'))
             db.commit()
 
     @staticmethod
-    def textMatching(transcript: str) -> str:
+    def matchText(transcript: str) -> str:
         newText = ''
         for word in transcript.split():
             if re.match(r"\b(\d{2}):(\d{2}):(\d{2})\.(\d{3})\b", word):

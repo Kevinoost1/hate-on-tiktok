@@ -16,7 +16,9 @@ class Database:
     def connect(self, path: str) -> sqlite3.Connection:
         return sqlite3.connect(path)
 
-    def insert_data(self, tableName: str, data: dict) -> None:
+    def insert_data(self, tableName: str, data: pd.DataFrame) -> None:
+        data: dict = pd.DataFrame.to_dict(data)
+
         colNames: str = ', '.join(data.keys())
         values = data.values()
         placeholder: str = ', '.join(['?'] * len(values))
@@ -28,17 +30,16 @@ class Database:
 
             conn.execute(query)
 
-    def retrieve_batch(self, batch_size: int, tableName: str, colNames: list, restrictions: str) -> pd.DataFrame:
+    def retrieve_data(self, tableName: str, colNames: list, restrictions: str=None, batch_size: int=None) -> pd.DataFrame:
         colNames: str = ', '.join(colNames)
 
         with self.connect(self.db_path) as conn:
-            query: str = f'''
-            SELECT {colNames} FROM {tableName}
-            WHERE {restrictions}
-            LIMIT {batch_size}
-            '''
+            query: str = f'SELECT {colNames} FROM {tableName}'
+            query += f' WHERE {restrictions}' if restrictions else ''
+            query += f' LIMIT {batch_size}' if batch_size else ''
 
             return pd.read_sql(query, conn)
+
 
 
 

@@ -25,7 +25,19 @@ class Database:
             query = f'''
             INSERT INTO {tableName} ({colNames}) VALUES ({placeholder})
             '''
+            conn.executemany(query, values)
 
+    def update_data(self, tableName: str, data: pd.DataFrame) -> None:
+        cols = ", ".join(f"{col} = ?" for col in data.iloc[:, 1:].columns)
+        values = [
+            tuple(row[1:]) + (row[0],)
+            for row in data.to_numpy()
+        ]
+
+        with self.connect(self.db_path) as conn:
+            query = f"""
+            UPDATE {tableName} SET {cols} WHERE id = ?
+            """
             conn.executemany(query, values)
 
     def retrieve_data(self, tableName: str, colNames: list, restrictions: str=None, batch_size: int=None) -> pd.DataFrame:

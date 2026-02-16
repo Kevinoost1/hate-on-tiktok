@@ -17,13 +17,13 @@ class Preprocess:
         self.translationModel: str = 'facebook_translator'
         self.translationLanguage: str = 'nl_XX'
         self.translationBatchSize: int = 16
-    def preprocess_text(self, df: pd.DataFrame, subtitlesColumn) -> pd.DataFrame:
+    def preprocess_text(self, df: pd.DataFrame, subtitlesColumn:str) -> pd.DataFrame:
         df[subtitlesColumn] = df[subtitlesColumn].apply(self.match_text)
         return df
 
     @staticmethod
     def match_text(transcript: str) -> str:
-        newText = ''
+        newText: str = ''
         for word in transcript.split():
             if re.match(r"\b(\d{2}):(\d{2}):(\d{2})\.(\d{3})\b", word):
                 continue

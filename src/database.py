@@ -1,5 +1,6 @@
 import sqlite3
 import pandas as pd
+import time
 
 
 ENV_PATH = r'C:\Users\2mrwm\Documents\phd\project_classification\env\database.env'
@@ -13,8 +14,15 @@ class Database:
         with open(self.env_fileName, 'r') as f:
             return f.read()
 
-    def connect(self, path: str) -> sqlite3.Connection:
-        return sqlite3.connect(path)
+    def connect(self, path: str, tries=10) -> sqlite3.Connection:
+        if tries == 0:
+            raise Exception('Failed to connect after 10 tries')
+        try:
+            return sqlite3.connect(path)
+        except:
+            time.sleep(60)
+            return self.connect(path, tries-1)
+
 
     def insert_data(self, tableName: str, data: pd.DataFrame) -> None:
         colNames: str = ', '.join(data.columns)

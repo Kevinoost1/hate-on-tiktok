@@ -36,9 +36,13 @@ It contains the following general methods:
 """
 
 class Database:
-    def __init__(self, env_fileName: str = ENV_PATH):
+    def __init__(self, transcriptTableName, env_fileName: str = ENV_PATH):
         self.env_fileName: str = env_fileName
         self.db_path: str = self.read_env()
+
+        self.transcriptTableName: str = transcriptTableName
+
+        self.enforce_correct_structure(self.transcriptTableName)
 
     def read_env(self) -> str:
         if self.env_fileName.endswith(".env") or self.env_fileName.endswith(".txt"):

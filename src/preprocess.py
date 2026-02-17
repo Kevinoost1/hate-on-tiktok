@@ -8,6 +8,7 @@ from datetime import datetime
 import time
 from torch.cuda.amp import autocast
 from collections import defaultdict
+import json
 
 
 class Preprocess:
@@ -16,15 +17,19 @@ class Preprocess:
 
         self.translationModelName: str = r"C:\Users\2mrwm\OneDrive - Universiteit Leiden (1)\facebook_translator"
         self.translationPath: str = r'C:\Users\2mrwm\OneDrive - Universiteit Leiden (1)'
-        self.translationLanguage: str = 'nl_XX'
         self.translationBatchSize: int = 16
+
+        self.maxWordsAllowed: int = 8
+        self.maxDiversityAllowed: float = 0.3
 
     def preprocess_text(self, df: pd.DataFrame, subtitlesColumn:str) -> pd.DataFrame:
         df[subtitlesColumn] = df[subtitlesColumn].apply(self.match_text)
         return df
 
-    @staticmethod
-    def match_text(transcript: str) -> str:
+    def match_text(self, transcript: str) -> str:
+        if re.match(r'{"utterances":', transcript):
+            transcript = self.clean_json_utterances(transcript)
+
         newText: str = ''
         for word in transcript.split():
             if re.match(r"\b(\d{2}):(\d{2}):(\d{2})\.(\d{3})\b", word):
@@ -35,6 +40,13 @@ class Preprocess:
                 case _:
                     newText += f"{word} "
         return newText
+
+    @staticmethod
+    def clean_json_utterances(text: str) -> str:
+        obj = json.loads(text)
+        utt = obj.get("utterances", [])
+        parts = [u.get("text", "").strip() for u in utt if isinstance(u, dict)]
+        return " ".join([p for p in parts if p]).strip()
 
     def generate_translation(self, df: pd.DataFrame, transcriptColumn:str, languageIdColumn: str) -> pd.DataFrame:
         indexes: [int] = df.index.tolist()
@@ -78,7 +90,7 @@ class Preprocess:
 
             for label, parts_list in accum.items():
                 joined_text: str = ' '.join(p for p in parts_list if p)
-                df.at[label, transcriptColumn] = joined_text
+                df.at[label, 'translation'] = joined_text
 
             return df
 
@@ -98,6 +110,15 @@ class Preprocess:
             parts.append(transcript)
 
         return parts
+
+    def filter_on_heuristics(self, df, transcriptColumn: str) -> pd.DataFrame:
+        transcripts: pd.Series = df[transcriptColumn].str.lower().str.split()
+        transcriptLengths: pd.Series = transcripts.str.len()
+
+        wordDiversity: pd.Series = transcripts.apply(lambda x: len(set(x)) / len(x) if x else 0)
+        df.loc[:, 'filtered'] = (transcriptLengths < self.maxWordsAllowed) | (wordDiversity < self.maxDiversityAllowed)
+
+        return df
 
 
 

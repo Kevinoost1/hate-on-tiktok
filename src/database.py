@@ -57,6 +57,17 @@ class Database:
             time.sleep(60)
             return self.connect(path, tries-1)
 
+    def enforce_correct_structure(self, tableName: str) -> None:
+        requiredCols = {'translation': 'TEXT', 'filtered': 'BOOLEAN'}
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            existingCols = [row[1] for row in cursor.fetchall()]
+
+        for col, type in zip(requiredCols.keys(), requiredCols.values()):
+            if col not in existingCols:
+                cursor.execute(f"ALTER TABLE {tableName} ADD {col} {type};")
+
     def insert_data(self, tableName: str, data: pd.DataFrame) -> None:
         colNames: str = ', '.join(data.columns)
         placeholder: str = ', '.join(['?'] * len(data.columns))

@@ -8,6 +8,8 @@ from datetime import datetime
 ENV_PATH = r'C:\Users\2mrwm\Documents\phd\project_classification\env\database.env'
 
 """
+In main.py you can find an example use for the entire analysis pipeline
+
 Contains all database methods used for the pipeline
 - Supply the path to your .sqlite3 database in a separate file when initializing the class
 
@@ -39,8 +41,11 @@ class Database:
         self.db_path: str = self.read_env()
 
     def read_env(self) -> str:
-        with open(self.env_fileName, 'r') as f:
-            return f.read()
+        if self.env_fileName.endswith(".env") or self.env_fileName.endswith(".txt"):
+            with open(self.env_fileName, 'r') as f:
+                return f.read()
+        else:
+            return self.env_fileName
 
     def connect(self, path: str, tries=10) -> sqlite3.Connection:
         if tries == 0:

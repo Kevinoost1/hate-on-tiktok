@@ -11,7 +11,7 @@ ENV_PATH = r'C:\Users\2mrwm\Documents\phd\project_classification\env\database.en
 In main.py you can find an example use for the entire analysis pipeline
 
 Contains all database methods used for the pipeline
-- Supply the path to your .sqlite3 database in a separate file when initializing the class
+- Supply the path to your .sqlite3 database in a separate file (.env or .txt) when initializing the class or pass it directly
 
 It contains the following general methods:
 
@@ -36,7 +36,7 @@ It contains the following general methods:
 """
 
 class Database:
-    def __init__(self, transcriptTableName, env_fileName: str = ENV_PATH):
+    def __init__(self, transcriptTableName, env_fileName: str=ENV_PATH):
         self.env_fileName: str = env_fileName
         self.db_path: str = self.read_env()
 

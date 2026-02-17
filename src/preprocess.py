@@ -82,17 +82,17 @@ class Preprocess:
 
             return df
 
-    def split_text(self, transcript: str, maxLength: int=750) -> [str]:
+    @staticmethod
+    def split_text(transcript: str, maxLength: int=750) -> [str]:
         if len(transcript) <= maxLength:
             return [transcript]
 
-        parts = []
+        parts: list = []
         while len(transcript) > maxLength:
-            split = transcript[:maxLength].rfind(' ')
-            if split == -1:
-                split = maxLength
+            split: [str] = transcript[:maxLength].rfind(' ')
+
             parts.append(transcript[:split + 1].strip())
-            transcript = transcript[split + 1:].strip()
+            transcript: str = transcript[split + 1:].strip()
 
         if transcript:
             parts.append(transcript)

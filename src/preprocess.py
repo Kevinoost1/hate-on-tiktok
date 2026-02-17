@@ -75,15 +75,12 @@ class Preprocess:
             for part_idx, label in enumerate(mapping):
                 text_part: str = decoded[part_idx] or ''
                 accum[label].append(text_part)
-                print(accum)
 
             for label, parts_list in accum.items():
                 joined_text: str = ' '.join(p for p in parts_list if p)
                 df.at[label, transcriptColumn] = joined_text
-                print(joined_text)
 
             return df
-
 
     def split_text(self, transcript: str, maxLength: int=750) -> [str]:
         if len(transcript) <= maxLength:

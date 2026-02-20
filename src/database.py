@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 """
 In main.py you can find an example use for the entire analysis pipeline
 
-Contains all database methods used for the pipeline
+*Contains all database methods used for the pipeline*
 - Supply the path to your .sqlite3 database in a separate file (.env or .txt) when initializing the class or pass it directly
 
 It contains the following general methods:

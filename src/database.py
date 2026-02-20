@@ -3,9 +3,12 @@ import pandas as pd
 import time
 import shutil
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+from pathlib import Path
 
 
-ENV_PATH = r'C:\Users\2mrwm\Documents\phd\project_classification\env\database.env'
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 """
 In main.py you can find an example use for the entire analysis pipeline
@@ -36,20 +39,12 @@ It contains the following general methods:
 """
 
 class Database:
-    def __init__(self, transcriptTableName, env_fileName: str=ENV_PATH):
-        self.env_fileName: str = env_fileName
-        self.db_path: str = self.read_env()
-
+    def __init__(self, transcriptTableName, db_path: str=BASE_DIR):
+        self.BASE_DIR: str = BASE_DIR 
+        self.db_path: str = self.BASE_DIR / 'database' / 'db.sqlite3'
         self.transcriptTableName: str = transcriptTableName
 
         self.enforce_correct_structure(self.transcriptTableName)
-
-    def read_env(self) -> str:
-        if self.env_fileName.endswith(".env") or self.env_fileName.endswith(".txt"):
-            with open(self.env_fileName, 'r') as f:
-                return f.read()
-        else:
-            return self.env_fileName
 
     def connect(self, path: str, tries=10) -> sqlite3.Connection:
         if tries == 0:
@@ -66,7 +61,9 @@ class Database:
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute(f'PRAGMA table_info({tableName})') 
             existingCols = [row[1] for row in cursor.fetchall()]
+            print(existingCols)
 
         for col, type in zip(requiredCols.keys(), requiredCols.values()):
             if col not in existingCols:
@@ -106,9 +103,9 @@ class Database:
 
             return pd.read_sql(query, conn)
 
-    def create_backups(self):
+    def create_backup(self):
         date = datetime.now().strftime("%Y%m%d_%H%M%S")
-        shutil.copy(self.db_path, rf"database\db_backup_{date}.sqlite3")
+        shutil.copy(self.db_path, self.BASE_DIR / 'database' / f'db_backup_{date}.sqlite3')
         print('Database copied')
 
 

@@ -124,7 +124,7 @@ class Preprocess:
                 joined_text: str = ' '.join(p for p in parts_list if p)
                 df.at[label, 'translation'] = joined_text
 
-            return df
+        return df
 
     @staticmethod
     def split_text(transcript: str, maxLength: int=750) -> [str]:

@@ -5,7 +5,7 @@ import sqlite3
 
 class Classify():
     @staticmethod
-    def transcipts_to_txt(self, df: str, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
+    def transcripts_to_txt(self, df: str, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
         with open('transcripts.txt', 'w', encoding='utf-8') as f:
             f.write(f'{transcript}, {desc} \n' for transcript, desc in zip(df[transcriptColumn], df[descriptionColumn]))
         

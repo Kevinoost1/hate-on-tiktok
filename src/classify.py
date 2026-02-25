@@ -5,7 +5,7 @@ import sqlite3
 
 class Classify():
     @staticmethod
-    def transcripts_to_txt(self, df: str, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
+    def transcripts_to_txt(df: str, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
         with open('transcripts.txt', 'w', encoding='utf-8') as f:
             f.write(f'{transcript}, {desc} \n' for transcript, desc in zip(df[transcriptColumn], df[descriptionColumn]))
         
@@ -14,7 +14,7 @@ class Classify():
         return id_df
 
     @staticmethod
-    def get_results(self, id_csvName: str, results_csvName: str) -> pd.DataFrame:
+    def get_results(id_csvName: str, results_csvName: str) -> pd.DataFrame:
         results_df: pd.DataFrame = pd.read_csv(results_csvName)
         id_df: pd.DataFrame = pd.read_csv(id_csvName)
 

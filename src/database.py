@@ -44,8 +44,7 @@ class Database:
         self.db_path: str = self.BASE_DIR / 'database' / 'db.sqlite3'
         self.transcriptTableName: str = transcriptTableName
 
-        self.enforce_correct_structure(self.transcriptTableName)
-
+       
     def connect(self, path: str, tries=10) -> sqlite3.Connection:
         if tries == 0:
             raise Exception('Failed to connect after 10 tries')
@@ -57,7 +56,8 @@ class Database:
             return self.connect(path, tries-1)
 
     def enforce_correct_structure(self, tableName: str) -> None:
-        requiredCols = {'translation': 'TEXT', 'filtered': 'BOOLEAN'}
+        requiredCols = {'translation': 'TEXT', 'filtered': 'BOOLEAN', 'topic': 'TEXT', 'topic_prob': 'REAL', 
+                        'sent': 'TEXT', 'sent_prob': 'REAL'}
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()

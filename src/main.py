@@ -35,5 +35,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    database = Database('transcript')
+    database.create_backup()
    

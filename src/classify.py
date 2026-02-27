@@ -7,8 +7,7 @@ class Classify():
     @staticmethod
     def transcripts_to_txt(df: str, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
         with open('transcripts.txt', 'w', encoding='utf-8') as f:
-            f.write(f'{transcript}, {desc} \n' for transcript, desc in zip(df[transcriptColumn], df[descriptionColumn]))
-        
+            f.writelines(f"{transcript}, {desc}\n" for transcript, desc in zip(df[transcriptColumn], df[descriptionColumn]))        
         id_df: pd.DataFrame = df[['id']]
         id_df.to_csv('id.csv')
         return id_df

@@ -14,7 +14,7 @@ In main.py you can find an example use for the entire analysis pipeline
 
 - get_results() -> when choicellm is finished with the classification, it will output a 'results.csv'.
     - This function merges the 'results.csv' with your 'id.csv' to ensure proper matching in the database.
-      It will only take the prediction
+      It will only take the prediction and the probabilities. If you want more data from the 'results.csv', you can add a similar line for this in the function.
 '''
 
 

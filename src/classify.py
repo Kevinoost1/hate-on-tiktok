@@ -18,14 +18,14 @@ In main.py you can find an example use for the entire analysis pipeline
 '''
 
 
-def transcripts_to_txt(df: str, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
+def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
     with open('transcripts.txt', 'w', encoding='utf-8') as f:
         f.writelines(f"{transcript}, {desc}\n" for transcript, desc in zip(df[transcriptColumn], df[descriptionColumn]))        
-    id_df: pd.DataFrame = df[['id']]
-    id_df.to_csv('id.csv')
+    id_df: pd.DataFrame = df[['video_id']]
+    id_df.to_csv('id.csv', index=False)
     return id_df
 
-def get_results(id_csvName: str, results_csvName: str) -> pd.DataFrame:
+def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv') -> pd.DataFrame:
     results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
 

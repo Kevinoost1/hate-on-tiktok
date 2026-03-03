@@ -14,7 +14,7 @@ def main():
     df = data.request_time_series()
     print(df.head())
 
-    plot = anal.construct_politics_t(df)
+    plot = anal.construct_politics_t_new(df)
     plot.show()
 
 
@@ -22,6 +22,30 @@ class Analysis:
     def __init__(self):
         pass
 
+
+    def construct_politics_t_new(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_desc', cutoff: str=50) -> plt.Figure:
+        df: pd.DataFrame = timeSeriesDf.copy()
+        df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True)        
+        df['news_politics'] = (df[topicColumnName] == 'Politics & Societal Issues').astype(int)
+
+        df: pd.DataFrame = df.set_index(dateColumnName)
+        df: pd.DataFrame = df.resample('3D').agg(n_videos=('video_id', 'count'), politics_videos=('news_politics', 'sum'))
+        df['ratio_news'] = df['politics_videos'] / df['n_videos']
+
+        # only keep the rows where there is 'enough' data
+        df:pd.DataFrame = df[df['n_videos'] >= cutoff]
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.plot(df.index, df['ratio_news'], marker='o')
+        ax.set_xlabel('Starting Date')
+        ax.set_ylabel('Ratio News, Politics & Societal Issues Videos')
+        ax.set_title('Ratio News, Politics & Societal Issues Videos over Time')
+
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        return plt
+        
 
     def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_desc', cutoff=50) -> plt.Figure:
         timeSeriesDf[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True)

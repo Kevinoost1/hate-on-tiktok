@@ -8,7 +8,11 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    pass
+    anal = Analysis()
+    data = DataExctract()
+    df = data.request_time_series()
+
+    plot = construct_politics_t(df)
 
 
 class Analysis:
@@ -53,6 +57,21 @@ class Analysis:
         plt.tight_layout()
 
         return plt
+
+
+class DataExtract:
+    def __init__(self, database: Database):
+        self.database: Database = database
+
+    def request_time_series(self) -> pd.DataFrame:
+        classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
+                                                                    colNames=['video_id', 'll3_topic_desc', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
+        dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
+
+        return classifications.merge(dates, on='video_id', how='left')
+
+
 
         
 

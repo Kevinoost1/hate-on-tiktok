@@ -14,9 +14,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 In main.py you can find an example use for the entire analysis pipeline
 
 *Contains all database methods used for the pipeline*
-- Supply the path to your .sqlite3 database in a separate file (.env or .txt) when initializing the class or pass it directly
+    - If you cloned the program, it will automatically set your working directory to the folder above 'src'.
+    You can then add, e.g., a folder 'database' to store your .sqlite3 file. 
+    If your structure is different, you can adjust the global BASE_DIR variable, or the __init__ method.
 
 It contains the following general methods:
+
+- enforce structure -> you can run this to check that your database table matches the general structure that is desired for the program.
+  - For example, within your transcript table, the program requires a 'translation' and 'filtered column to store the preprocesing steps.
+    It also comes with a check for the following tables 'topic', 'topic_prob', 'sent', 'sent_prob'.
+    This can function as a template structure for later classifications. 
+    However, if you wish to change the names or structure (depending on your aim), just adjust the names in the dictionairy within the function.
 
 - insert data -> you can use this when you obtain new data from new participants or sources. 
     This is useful when you want to import data that does not already have an associated id in the database
@@ -43,17 +51,16 @@ class Database:
         self.BASE_DIR: str = BASE_DIR 
         self.db_path: str = self.BASE_DIR / 'database' / 'db.sqlite3'
         self.transcriptTableName: str = transcriptTableName
-
-       
-    def connect(self, path: str, tries=10) -> sqlite3.Connection:
+ 
+    def connect(self, tries=10) -> sqlite3.Connection:
         if tries == 0:
             raise Exception('Failed to connect after 10 tries')
 
         try:
-            return sqlite3.connect(path)
+            return sqlite3.connect(self.db_path)
         except:
             time.sleep(60)
-            return self.connect(path, tries-1)
+            return self.connect(self.db_path, tries-1)
 
     def enforce_correct_structure(self, tableName: str) -> None:
         requiredCols = {'translation': 'TEXT', 'filtered': 'BOOLEAN', 'topic': 'TEXT', 'topic_prob': 'REAL', 

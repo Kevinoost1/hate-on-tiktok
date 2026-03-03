@@ -8,11 +8,14 @@ import matplotlib.pyplot as plt
 
 
 def main():
+    db = Database('transcript_classification')
     anal = Analysis()
-    data = DataExctract()
+    data = DataExtract(db)
     df = data.request_time_series()
+    print(df.head())
 
-    plot = construct_politics_t(df)
+    plot = anal.construct_politics_t(df)
+    plot.show()
 
 
 class Analysis:
@@ -20,32 +23,33 @@ class Analysis:
         pass
 
 
-    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_desc') -> plt.Figure:
-        df[dateColumnName] = pd.to_datetime(df[dateColumnName], yearfirst=True)
+    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_desc', cutoff=50) -> plt.Figure:
+        timeSeriesDf[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True)
          
-        def construct_data(self, df) -> pd.DataFrame:
+        def construct_data(df) -> pd.DataFrame:
             df: pd.DataFrame = df.sort_values(dateColumnName)
 
             startDate: int = df[dateColumnName].min()
             endDate: int = df[dateColumnName].max()
-            diffInterval: float = (end - start).days()
+            diffInterval: float = (endDate - startDate).days
 
             if diffInterval <= 1:
                 return [df]
 
-            n_videos: int = sum(df[df[topicColumnName] == 'Politics & Societal Issues'].astype(int))
+            n_videos: int = (df[topicColumnName] == 'Politics & Societal Issues').sum()
             df['n_videos'] = n_videos
-            df['ratio_news']: pd.Series = n_videos / len(df[topicColumnName])
-            df['start_date']: pd.Series = df[startDate]
+            df['ratio_news'] = n_videos / len(df[topicColumnName])
+            df['start_date'] = startDate
 
 
-            middlePoint: float = start + (diffInterval / 2)
-            leftSide: pd.DataFrame = df[df[middlePoint] <= middlePoint]
-            rightSide: pd.DataFrame = df[df[middlePoint] > middlePoint]
+            middlePoint: float = startDate + pd.Timedelta(days=diffInterval / 2)
+            leftSide: pd.DataFrame = df[df[dateColumnName] <= middlePoint]
+            rightSide: pd.DataFrame = df[df[dateColumnName] > middlePoint]
 
-            return construct_politics_t(leftSide, dateColumnName) + construct_politics_t(right, dateColumnName)
+            return construct_data(leftSide) + construct_data(rightSide)
 
-        df: pd.DataFrame = pd.concat(construct_data(df))
+        df: pd.DataFrame = pd.concat(construct_data(timeSeriesDf))
+        df: pd.DataFrame = df[df['n_videos'] >= 50]
 
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.plot(df['start_date'], df['ratio_news'], marker='o')
@@ -69,7 +73,21 @@ class DataExtract:
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
                                                          colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
 
-        return classifications.merge(dates, on='video_id', how='left')
+        timeSeriesDf: pd.DataFrame = classifications.merge(dates, on='video_id', how='left')
+        return self.format_time(timeSeriesDf)
+
+    @staticmethod
+    def format_time(df: pd.DataFrame, dateColumnName: str='date_ymd', timeColumnName: str='time_hms') -> pd.DataFrame: 
+        df['timestamp'] = pd.to_datetime(df[dateColumnName] + ' ' + df[timeColumnName])
+        df = df.sort_values(['user_id', 'timestamp'])
+        df['next_ts'] = df.groupby('user_id')['timestamp'].shift(-1)
+        df['watch_time_s'] = (df['next_ts'] - df['timestamp']).dt.total_seconds().fillna(0)
+        
+        # a new session is defined after 5 min without scrolling
+        df['new_session'] = (df['watch_time_s'] >= 300).astype(int)
+
+        # for now, drop the 'new_session == 1' rows. At those points the watch_time_s is not accurate (artificially large)
+        return df[df['new_session'] == 0]
 
 
 

@@ -22,19 +22,31 @@ class Analysis:
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
 
 
-    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=15) -> plt.Figure:
+    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=8) -> plt.Figure:
         df: pd.DataFrame = timeSeriesDf.copy()
         df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True)        
         df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
         df['watchtime_politics'] = df['watch_time_s'] * df['news_politics']
         
         df: pd.DataFrame = df.set_index(dateColumnName)
-        df: pd.DataFrame = df.resample('2D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'))
-        df['ratio_news'] = df['n_politics_videos'] / df['n_videos']
-        df['avg_watchtime_politics'] = df['watchtime_politics'] / df['n_politics_videos']
 
+        user_dfs = []
+        for user, user_df in df.groupby('user_id'):
+            resampled: pd.DataFrame = user_df.resample('5D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'))
+
+            resampled['ratio_news'] = resampled['n_politics_videos'] / resampled['n_videos']
+            resampled['avg_watchtime_politics'] = resampled['watchtime_politics'] / resampled['n_politics_videos']
+            user_dfs.append(resampled)
+
+        df: pd.DataFrame = pd.concat(user_dfs)
         # only keep the rows where there is 'enough' data
         df: pd.DataFrame = df[df['n_politics_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
+
+        df:pd.DataFrame = df.groupby(df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
+                                                   mean_watch_time=('avg_watchtime_politics', 'mean'), sem_watch_time=('avg_watchtime_politics', lambda x: x.std()/np.sqrt(len(x))))
+
+        df['mean_ratio'] = df['mean_ratio'].rolling(window=5, min_periods=1, center=True).mean()
+        df['mean_watch_time'] = df['mean_watch_time'].rolling(window=5, min_periods=1, center=True).mean()
 
         political_dates: dict[str, pd.Datetime] = {
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
@@ -52,12 +64,17 @@ class Analysis:
                 ax.axvline(date, linestyle='--', label=label, color=self.colors['green'])
         axes[0].legend()
 
-        axes[0].plot(df.index, df['ratio_news'], marker='o', color=self.colors['dark_blue'])
-        axes[1].plot(df.index, df['avg_watchtime_politics'], marker='o', color=self.colors['brown'])
-        axes[1].set_xlabel('Starting Date')
+        axes[0].plot(df.index, df['mean_ratio'], marker='o', color=self.colors['dark_blue'])
+        axes[0].fill_between(df.index, df['mean_ratio'] - df['sem_ratio'], df['mean_ratio'] + df['sem_ratio'], color=self.colors['dark_blue'], alpha=0.3)
         axes[0].set_ylabel('Ratio News, Politics & Societal Issues Videos')
-        axes[1].set_ylabel('Mean Watch Time (sec) on News, Politics & Societal Issues Videos')
+        axes[0].set_ylim(0, (df['mean_ratio'] + df['sem_ratio']).max())
         axes[0].set_title('Ratio News, Politics & Societal Issues Videos over Time')
+        
+        axes[1].plot(df.index, df['mean_watch_time'], marker='o', color=self.colors['brown'])
+        axes[1].fill_between(df.index, df['mean_watch_time'] - df['sem_watch_time'], df['mean_watch_time'] + df['sem_watch_time'], color=self.colors['brown'], alpha=0.3)
+        axes[1].set_xlabel('Starting Date')
+        axes[1].set_ylim(0, (df['mean_watch_time'] + df['sem_watch_time']).max())
+        axes[1].set_ylabel('Mean Watch Time (sec) on News, Politics & Societal Issues Videos')
 
         plt.xticks(rotation=45)
         plt.tight_layout()

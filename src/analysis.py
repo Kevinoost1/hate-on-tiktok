@@ -47,46 +47,6 @@ class Analysis:
         return plt
         
 
-    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_desc', cutoff=50) -> plt.Figure:
-        timeSeriesDf[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True)
-         
-        def construct_data(df) -> pd.DataFrame:
-            df: pd.DataFrame = df.sort_values(dateColumnName)
-
-            startDate: int = df[dateColumnName].min()
-            endDate: int = df[dateColumnName].max()
-            diffInterval: float = (endDate - startDate).days
-
-            if diffInterval <= 1:
-                return [df]
-
-            n_videos: int = (df[topicColumnName] == 'Politics & Societal Issues').sum()
-            df['n_videos'] = n_videos
-            df['ratio_news'] = n_videos / len(df[topicColumnName])
-            df['start_date'] = startDate
-
-
-            middlePoint: float = startDate + pd.Timedelta(days=diffInterval / 2)
-            leftSide: pd.DataFrame = df[df[dateColumnName] <= middlePoint]
-            rightSide: pd.DataFrame = df[df[dateColumnName] > middlePoint]
-
-            return construct_data(leftSide) + construct_data(rightSide)
-
-        df: pd.DataFrame = pd.concat(construct_data(timeSeriesDf))
-        df: pd.DataFrame = df[df['n_videos'] >= 50]
-
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.plot(df['start_date'], df['ratio_news'], marker='o')
-        ax.set_xlabel('Starting Date')
-        ax.set_ylabel('Ratio News, Politics & Societal Issues Videos')
-        ax.set_title('Weekly Ratio News, Politics & Societal Issues Videos')
-
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-
-        return plt
-
-
 class DataExtract:
     def __init__(self, database: Database):
         self.database: Database = database

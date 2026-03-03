@@ -19,7 +19,7 @@ def main():
 
 class Analysis:
     def __init__(self):
-        pass
+        self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
 
 
     def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=15) -> plt.Figure:
@@ -49,11 +49,11 @@ class Analysis:
 
         for label, date in political_dates.items():
             for ax in axes:
-                ax.axvline(date, linestyle='--', label=label)
+                ax.axvline(date, linestyle='--', label=label, color=self.colors['green'])
         axes[0].legend()
 
-        axes[0].plot(df.index, df['ratio_news'], marker='o')
-        axes[1].plot(df.index, df['avg_watchtime_politics'], marker='o')
+        axes[0].plot(df.index, df['ratio_news'], marker='o', color=self.colors['dark_blue'])
+        axes[1].plot(df.index, df['avg_watchtime_politics'], marker='o', color=self.colors['brown'])
         axes[1].set_xlabel('Starting Date')
         axes[0].set_ylabel('Ratio News, Politics & Societal Issues Videos')
         axes[1].set_ylabel('Mean Watch Time (sec) on News, Politics & Societal Issues Videos')
@@ -61,6 +61,7 @@ class Analysis:
 
         plt.xticks(rotation=45)
         plt.tight_layout()
+        plt.show()
 
         return fig
 

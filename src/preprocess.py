@@ -75,8 +75,12 @@ class Preprocess:
 
     @staticmethod
     def clean_json_utterances(text: str) -> str:
-        obj = json.loads(text)
-        utt = obj.get("utterances", [])
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            return text
+        
+        utt = obj.get("utterances") or []
         parts = [u.get("text", "").strip() for u in utt if isinstance(u, dict)]
         return " ".join([p for p in parts if p]).strip()
 
@@ -148,7 +152,7 @@ class Preprocess:
         transcriptLengths: pd.Series = transcripts.str.len()
 
         wordDiversity: pd.Series = transcripts.apply(lambda x: len(set(x)) / len(x) if x else 0)
-        df.loc[:, 'filtered'] = (transcriptLengths < self.maxWordsAllowed) | (wordDiversity < self.maxDiversityAllowed)
+        df.loc[:, 'filtered'] = ((transcriptLengths < self.maxWordsAllowed) | (wordDiversity < self.maxDiversityAllowed)).astype(int)
 
         return df
 

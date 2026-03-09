@@ -5,6 +5,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
+import json
 
 
 
@@ -13,9 +14,11 @@ def main():
     anal = Analysis()
     data = DataExtract(db)
     df = data.request_time_series()
-    plot = anal.construct_politics_t(df)
+    time_plot = anal.construct_politics_t(df)
+    civility_plot = anal.civility_avg(df)
   
-    anal.get_graph_report(plot)
+    anal.get_graph_report(time_plot, civility_plot)
+    
 
 class Analysis:
     def __init__(self):
@@ -39,7 +42,7 @@ class Analysis:
             user_dfs.append(resampled)
 
         df: pd.DataFrame = pd.concat(user_dfs)
-        # only keep the rows where there is 'enough' data
+        # RD: only keep the rows where there is 'enough' data
         df: pd.DataFrame = df[df['n_politics_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
 
         df:pd.DataFrame = df.groupby(df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
@@ -82,13 +85,30 @@ class Analysis:
 
         return fig
 
+    def civility_avg(self, timeSeriesDf: pd.Dataframe, intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> plt.Figure:
+        df: pd.Dataframe = timeSeriesDf.copy()[['user_id', 'official', intoleranceColumnName, impolitenessColumnName]]
+
+        results = pd.DataFrame()
+        results[f'avg_{impolitenessColumnName}'] = df.groupby(['user_id', 'official'])[impolitenessColumnName].mean()
+        results[f'avg_{intoleranceColumnName}'] = df.groupby(['user_id', 'official'])[intoleranceColumnName].mean() 
+        results = results.merge(df, on=['user_id', 'official'], how='right').drop(columns=['intolerance', 'impoliteness'])
+        print(results.columns)
+        print(results)
+        
+        fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+        axes[0].violinplot(results[f'avg_{impolitenessColumnName}'], results['official'])
+        axes[0].set_ylabel('Average Impoliteness')
+        axes[0].set_title('Average Incivility Across Channel Types')
+        axes[1].violinplot(results[f'avg_{intoleranceColumnName}'], results['official'])
+        axes[1].set_ylabel('Average Intolerance')
+        plt.show()
+
+        return fig
+        
     def get_graph_report(self, *figs: tuple[plt.Figure, ...]) -> None:
         with PdfPages('graphs.pdf') as pdf:
             for fig in figs:
-                pdf.savefig(fig)
-                pdf.close()
-            
-
+                pdf.savefig(fig) 
         
 
 class DataExtract:
@@ -101,8 +121,19 @@ class DataExtract:
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
                                                          colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
 
+        videos = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
+
+        official, unofficial = self.load_channels()
+        
+        channels: pd.DataFrame = self.database.retrieve_data(tableName='authors', 
+                                                             colNames=['id AS author_id', 'unique_id'])
+
+        channels['official'] = channels['unique_id'].apply(lambda x: (x in official)).astype(int)
+
         timeSeriesDf: pd.DataFrame = self.format_time(dates)
-        return timeSeriesDf.merge(classifications, on='video_id', how='left')
+        return timeSeriesDf.merge(classifications, on='video_id', how='left') \
+            .merge(videos, on='video_id', how='left') \
+            .merge(channels, on='author_id', how='left')
 
     @staticmethod
     def format_time(df: pd.DataFrame, dateColumnName: str='date_ymd', timeColumnName: str='time_hms') -> pd.DataFrame: 
@@ -111,12 +142,19 @@ class DataExtract:
         df['next_ts'] = df.groupby('user_id')['timestamp'].shift(-1)
         df['watch_time_s'] = (df['next_ts'] - df['timestamp']).dt.total_seconds().fillna(0)
         
-        # a new session is defined after 5 min without scrolling
+        # RD: a new session is defined after 5 min without scrolling
         df['new_session'] = (df['watch_time_s'] >= 300).astype(int)
         df.loc[df.groupby('user_id').tail(1).index, 'new_session'] = 2
         
-        # for now, drop the 'new_session == 1' rows. At those points the watch_time_s is not accurate (artificially large)
+        # RD: for now, drop the 'new_session != 0' rows. At those points the watch_time_s is not accurate (artificially large)
         return df[df['new_session'] == 0]
+
+    @staticmethod
+    def load_channels(channelDefinitionFileName: str='/home/kevin/Documents/phd/Project-Data-Donation/src/channel_def.json') -> (list[str, ...], list[str, ...]):
+        with open(channelDefinitionFileName, 'r') as f:
+            channels = json.load(f)
+        
+        return channels['official'], channels['unofficial']
 
 
 

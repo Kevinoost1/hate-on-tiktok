@@ -31,6 +31,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv') ->
 
     id_df['pred'] = results_df['pred']
     id_df['prob'] = results_df['prob']
+    id_df['probs'] = results_df['probs']
 
     return id_df
 

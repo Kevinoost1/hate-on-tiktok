@@ -6,6 +6,7 @@ matplotlib.use('TkAgg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import json
+import seaborn as sns
 
 
 
@@ -13,11 +14,17 @@ def main():
     db = Database('transcript_classification')
     anal = Analysis()
     data = DataExtract(db)
-    df = data.request_time_series()
-    time_plot = anal.construct_politics_t(df)
-    civility_plot = anal.civility_avg(df)
-  
-    anal.get_graph_report(time_plot, civility_plot)
+    graphs = Graphs()
+
+    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series()
+
+    politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
+    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
+
+    politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
+    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+ 
+    anal.get_graph_report(politics_t_plot, civility_plot)
     
 
 class Analysis:
@@ -25,7 +32,7 @@ class Analysis:
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
 
 
-    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=8) -> plt.Figure:
+    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=8) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()
         df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True)        
         df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
@@ -50,6 +57,26 @@ class Analysis:
 
         df['mean_ratio'] = df['mean_ratio'].rolling(window=5, min_periods=1, center=True).mean()
         df['mean_watch_time'] = df['mean_watch_time'].rolling(window=5, min_periods=1, center=True).mean()
+
+        return df
+
+
+    def construct_civility(self, timeSeriesDf: pd.Dataframe, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> plt.Figure:
+        df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'official', topicColumnName, intoleranceColumnName, impolitenessColumnName]]
+        df: pd.DataFrame = df[df[topicColumnName] == 'Politics & Social Issues']
+ 
+        results: pd.Dataframe = (df.groupby(['user_id', 'official'], as_index=False).agg(
+            avg_impoliteness=(impolitenessColumnName, 'mean'),
+            avg_intolerance=(intoleranceColumnName, 'mean')
+        ))
+
+        
+class Graphs():
+    def __init__(self):
+        self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
+                
+    def create_timeseries_graph(self, dfs: list[pd.DataFrame]): 
+        df = dfs[0]
 
         political_dates: dict[str, pd.Datetime] = {
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
@@ -83,39 +110,40 @@ class Analysis:
         plt.tight_layout()
         plt.show()
 
-        return fig
+        return fig         
 
-    def civility_avg(self, timeSeriesDf: pd.Dataframe, intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> plt.Figure:
-        df: pd.Dataframe = timeSeriesDf.copy()[['user_id', 'official', intoleranceColumnName, impolitenessColumnName]]
+    def create_civility_graph(self, dfs: list[pd.DataFrame]):
+        results = dfs[0]
+        fig, axes = plt.subplots(2, 1, figsize=(8,6), sharex=True)
 
-        results = pd.DataFrame()
-        results[f'avg_{impolitenessColumnName}'] = df.groupby(['user_id', 'official'])[impolitenessColumnName].mean()
-        results[f'avg_{intoleranceColumnName}'] = df.groupby(['user_id', 'official'])[intoleranceColumnName].mean() 
-        results = results.merge(df, on=['user_id', 'official'], how='right').drop(columns=['intolerance', 'impoliteness'])
-        print(results.columns)
-        print(results)
-        
-        fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
-        axes[0].violinplot(results[f'avg_{impolitenessColumnName}'], results['official'])
-        axes[0].set_ylabel('Average Impoliteness')
-        axes[0].set_title('Average Incivility Across Channel Types')
-        axes[1].violinplot(results[f'avg_{intoleranceColumnName}'], results['official'])
-        axes[1].set_ylabel('Average Intolerance')
+        sns.stripplot(data=results, x="official", y="avg_impoliteness", jitter=0.2, alpha=0.3, ax=axes[0], size=3, color=self.colors['orange'])
+        sns.pointplot(data=results, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
+
+        axes[0].set_ylabel("Average Impoliteness")
+        axes[0].set_title("Civility Across Channel Types")
+
+        sns.stripplot(data=results, x="official", y="avg_intolerance", jitter=0.2, alpha=0.3, ax=axes[1], size=3, color=self.colors['orange'])
+        sns.pointplot(data=results, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
+
+        axes[1].set_ylabel("Average Intolerance")
+        axes[1].set_xticklabels(["Unofficial","Official"])
+
+        plt.tight_layout() 
         plt.show()
 
         return fig
-        
+
     def get_graph_report(self, *figs: tuple[plt.Figure, ...]) -> None:
         with PdfPages('graphs.pdf') as pdf:
             for fig in figs:
                 pdf.savefig(fig) 
-        
+    
 
 class DataExtract:
     def __init__(self, database: Database):
         self.database: Database = database
 
-    def request_time_series(self) -> pd.DataFrame:
+    def request_time_series(self, channelOrdering: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', 'll3_topic_single_pred', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
@@ -123,18 +151,23 @@ class DataExtract:
 
         videos = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 
-        official, unofficial = self.load_channels()
-        
-        channels: pd.DataFrame = self.database.retrieve_data(tableName='authors', 
-                                                             colNames=['id AS author_id', 'unique_id'])
-
+        official, unofficial, ordering = self.load_channels() 
+        channels: pd.DataFrame = self.database.retrieve_data(tableName='authors', colNames=['id AS author_id', 'unique_id'])
         channels['official'] = channels['unique_id'].apply(lambda x: (x in official)).astype(int)
 
         timeSeriesDf: pd.DataFrame = self.format_time(dates)
-        return timeSeriesDf.merge(classifications, on='video_id', how='left') \
+        timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(classifications, on='video_id', how='left') \
             .merge(videos, on='video_id', how='left') \
             .merge(channels, on='author_id', how='left')
+        
+        timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
+        if channelOrdering: 
+            for n in range(len(ordering)):
+                timeSeriesDf.loc[timeSeriesDf['unique_id'] in ordering[n], 'official'] = 0
+                timeSeriesDfs.append(timeSeriesDf.copy())
 
+        return timeSeriesDfs
+        
     @staticmethod
     def format_time(df: pd.DataFrame, dateColumnName: str='date_ymd', timeColumnName: str='time_hms') -> pd.DataFrame: 
         df['timestamp'] = pd.to_datetime(df[dateColumnName] + ' ' + df[timeColumnName])
@@ -154,7 +187,7 @@ class DataExtract:
         with open(channelDefinitionFileName, 'r') as f:
             channels = json.load(f)
         
-        return channels['official'], channels['unofficial']
+        return channels['official'], channels['unofficial'], channels['ordering']
 
 
 

@@ -1,0 +1,58 @@
+{
+  "mode": "categorical",
+  "chat": false,
+  "system_prompt": "# Main topic\n\nYou are a professional text coder of TikTok video transcripts.\n\nYour task is to determine whether the MAIN TOPIC of a TikTok video is about public news, politics, public affairs, or societal issues as judged by the video transcript and video description.\n\nOnly classify a transcript as \"News, Politics & Societal Issues\" if the political or public-institutional element is the central organizing focus of the content. Use the category definitions below strictly.\n\n{categories}",
+  "prompt_format": "## Example {n}.\n\nTranscript: {item}\n\nThis transcript fits best in category{label_hint}:",
+  "labels": [
+    "A",
+    "B"
+  ],
+  "categories": {
+    "News, Politics & Societal Issues": "The transcript's primary and central focus is on government actions, elections, political campaigns, protests, public policy, legislation, court rulings, public institutional decisions, political ideology related to governance, or widely reported current news events involving societal issues or governance. Political actors (such as Geert Wilders, Thierry Baudet, Jimmy Dijk, Rob Jetten, Mark Rutte, Jesse Klaver, Dick Schoof, Lidewij de Vos, Joe Biden, Kamala Harris, or Donald Trump) must be discussed in relation to their official role, opinions, election campaign, decisions, policies, or public actions, or mentioned in the hashtags. Crime is included ONLY when it is discussed as a real-world criminal case, arrest, ongoing police action, legal proceeding, institutional investigation, justice system issue, or major public news event. Discussion of viral misinformation or conspiracy theories about real criminal investigations or public events counts ONLY if the video explicitly discusses the claim in relation to news reporting, evidence, or institutional actors (e.g., police, rijksrecherche, marechaussee, ICE, FBI, courts). The institutional, justice, societal issue, or governance dimension must be explicit and central to the content.",
+    "Other": "The transcript does NOT primarily focus on public governance, major societal issues, political actors, public policy, or major news events. This includes personal stories, vlogs, travel experiences or complaints (e.g., flight delays, airline service issues), sports news, education/study tips, final exam guides or tips, travel content, celebrity gossip, lifestyle content, interviews, podcasts, or entertainment conversations. It also includes educational explainers (e.g., mortgages, traffic rules), military homecomings without policy discussion or specific war-related opinions, true crime storytelling without broader institutional analysis, missing person speculation or amateur searching, recounting rumors about arrests or incidents without reference to verified news coverage or institutions, and general social commentary not centered on governance, public institutions, or a widely reported societal issue."
+  },
+  "examples": [
+    {
+      "item": "  Hello, guys.  Super happy with my first goal with this Jersey.  I enjoy it so much. Happy with the 3 points as well.  We. We did a great job,  and then we accomplished what we wanted.  Now we getting ready for the game on Champions League  and on this one. Uh,  thank you so much for the support again,  and then we'll see you at home.  Do it! Do it!, Carranza calls it a day: doei doei 🤣 ",
+      "target_index": 1
+    },
+    {
+      "item": " Yeah, I think that people need to ask themselves  why you never see western media  or pro Israel media, um,  putting microphones in front of Israelis faces.  Why is that?  Why is it that we only see pre approved government spokespeople  speaking to American and British audiences?  Um, that's because Israeli society is very,  very fascist. Uh, yes,  we hear that. You know,  there was socialist cabuts at the beginning,  and I'm sure there was a lot of progressive enclaves over time  in Israel. Well,  a lot of leftists have been simply pushed out.  To be a leftist is simply a slur,  and it's, in fact,  more dangerous than ever. Um,  you know, I spent a month in the West Bank.  I interviewed hundreds of Palestinians.  Not one person ever said anything remotely genocidal about Israelis.  All of them just said, we just wanna live and coexist side by side.  We just wanna live in peace.  Why do they have to move on top of our villages?  Why do they have to do this to us?  Why did the bully harass and intimidate us?  Why can't they just coexist with us?  I went to Jerusalem, to a place called Tolerance Square,  for literally like three hours,  and the racism and vitriolic,  genocidal incitement against Palestinians was palpable.  I mean,  all I did was just go around and do man on the streets like I do.  I do that everywhere I go.  I just like to get a snapshot of where people's Minds are at.  And I literally just asked Israel.  It wasn't even just Israelis.  It was settlers. It was, um,  just American citizens who were there,  just moving to Israel. Of course,  we know a lot of people just up and move,  just like Netanyahu himself is from Philadelphia.  I just simply asked them, what do you think about the situation?  And you should hear the rhetoric that came out of people's mouths,  knowing that they were on camera,  every single one as spouse. Um, genocide., Journalist Abby Martin spoke to Ash Sarkar for this week’s episode of Downstream. Watch the full episode via the link in our bio. #politics #uspolitics #us #usa #uk ",
+      "target_index": 0
+    },
+    {
+      "item": "about 1400 they had a crazy king in France uh karel the beloved is called karel the beloved karel the beloved on one day IE drives around with one army and then IE starts all of a sudden with his sword starts hacking IE on his men that's not good of course uh sign crazy house yes 5 kills of his own soldiers oh hysterical yes and a year later then there's a party at the HOF and then he dresses up with some friends they've been keeping close to each other and they're drowning in pee and then they're going to call and walk through the party someone who's saying hey what's going on there fucko's coming near and so uh everybody's dead except for the king uh 4 people see IE delivering fire in front of his eyes but from that moment on, it's really been over with his mental health Uhm, and that chaos paves the way for King Henry the fifth of England to pursue his hobby, which is to invade France., Vurig type die Karel de ‘geliefde’ 🔥",
+      "target_index": 1
+    },
+    {
+      "item": "  What? Pregnant?  Yeah, we found out this morning.  Good Lord. What did her parents say?  I don't know. She's telling them tonight too.  What? What's that face for?  What's this? What's going on?  Um, well,  I'll let Josh tell you that.  No, you say it.  No, you got yourself into this.  Now tell him.  Well,  Ella's pregnant. Ella?  As in your girlfriend Ella?  Darling, it's alright if you go downstairs and make me a cuppa.  I think it's best to talk to him alone.  Of course. I think that's best.  Good luck.  Take a seat. Dad.  Look, just let me explain.  Look, son,  you don't need to explain, alright?  Congratulations,  that's amazing. Wait, what?  So you're not annoyed? No,  why would I be? Look,  I know your mum's a bit mad,  but she'll come around. Look,  me and your mum are due at the same age.  Besides, I wouldn't worry about me.  I'd worry about when Ella's dad finds out.  Oh, yeah, forgot about that.  All my days. It's her dad.  Oh, God.  Right, answer it. Alright.  Hello?, #tiktok #fy #fyp #foryou #humor #skit #viral #pov  ",
+      "target_index": 1
+    },
+    {
+      "item": "an airplane that was on its way from the airport to rumenee had to make a compulsory stopover in the gutters in the morning this passenger would have reportedly turned violently towards the flight attendants and hadn't tracked down any clues and hit baggage boxes, so it was decided to make a stopover and get the man out of the airplane, and the man was awaited in the gutters by the thirsty police, and after about an hour the airplane was pulled up again, bookkeeping, Vliegtuigmaatschappij Wizz Air is gevraagd om een reactie, maar heeft tot nu toe niet gereageerd. #omroepbrabant #brabant #vliegtuig #boekarest #tussenstop #stewardess #eindhoven #voorjoupagina #voorjou #vjp #foryoupage #foryou #fyp", 
+      "target_index": 0
+    },
+    {
+      "item": "This coming Saturday Sky Shot 4K drone videos will be present in Waterloo for the reenactment of the battle of Waterloo. This amazing event will be recorded with our cameras and drones and you can find the video later on our YouTube channel and Facebook. Follow us on social media like Facebook and Instagram to be updated about the latest creations from sky shot 4K drone videos! Haha the battle of Waterloo coming soon on our YouTube and Facebook page.,  #skyshot4k #waterloo #waterloo1815 #wellington #reenactment #battle #france #prussia #unitedkingdom #napoléon #napoleon #dukewellington #marechalblucher #belgique #belgie #belgium #tourismewallonie #napoleonbonaparte",
+      "target_index": 1
+    },
+    {
+      "item": "How often do you think of the top performers who took part in the song festival in 2009 with the song Sleeve every week? I really think every week. You don't, you don't., Stel deze vraag ook aan je vriend!!",
+      "target_index": 1
+    },
+    {
+      "item": "President business stole the craggle, the most powerful object in the universe. Blah, blah, blah. Proper name , theyre all just so😍 #olympics #paris2024 #gymnastics #foryou #foryoupage #foru #foryupage #viral #trend #viralvideo #trending @suni @Ruby Grace @Georgie Fenton",
+      "target_index": 1
+    },
+    {
+      "item": "shit math is on it sure you know it you come home from school and you parents know your grade earlier than you but not at this school in Zeist parents are allowed there definitely no longer look at your transcript trial with this has been good in recent months according to ekonomi teacher Stijn the students enjoy being at 1 time of their choice their grades with their parents to share it ensures moreverantwoordelijkheid in school learning and it ensures less performance pressure the whole progress is now in the hands of the students themselves but not everyone is happy with it, teacher Stijn sees about 10% of parents would like to keep the same control but the school says to him you can still watch but then you have to sit down with your child instead of looking behind their back what do you think your parents should be able to watch or not , Wat vind jij van het besluit van de school in Zeist? 🎒📚 #zeist #cijfers #magister #wijzijnutrecht",
+      "target_index": 0
+    },
+    {
+      "item": "  Actually talking about school  opening up again in a few days.  What the fuck are you talking about, Deze vakantie ging te snel #foryou #backtoschool #fyp #voorjou ",
+      "target_index": 1
+    }     
+ 
+  ],
+  "_comment": "If \"labels\" is omitted, will use the options themselves as responses (recommended only if the category names are single words). Under \"examples\", \"target_index\" is always the integer index of the correct choice in the list, 0-based."
+}

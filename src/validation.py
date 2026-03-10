@@ -52,9 +52,12 @@ class Validation:
     def get_classification_report(self, yTrueColumnName: str=f'manual_topic', yPredColumnName: str='pred') -> dict[int, dict]: 
         reports: dict = {}
         for i, df in enumerate(self.validationDfs):
-            print(df[yPredColumnName].unique())
+            df[yTrueColumnName] = df[yTrueColumnName].apply(lambda x: x.strip())
+            df[yPredColumnName] = df[yPredColumnName].apply(lambda x: x.strip())
+
             print(df[yTrueColumnName].unique())
-            class_report = classification_report(df[yTrueColumnName].apply(lambda x: x.strip()), df[yPredColumnName].apply(lambda x: x.strip()), 
+            print(df[yPredColumnName].unique())
+            class_report = classification_report(df[yTrueColumnName], df[yPredColumnName], 
                                               target_names=self.posLabels, output_dict=True) 
             le = LabelEncoder()
             le.fit(pd.concat([df[yTrueColumnName], df[yPredColumnName]]))
@@ -90,7 +93,7 @@ def topic():
     df6 = df_orig.merge(df_val6, on='video_id', how='left')    
     df7 = df_orig.merge(df_val7, on='video_id', how='left')    
     df8 = df_orig.merge(df_val8, on='video_id', how='left')    
-    df9 = df_orig.merge(df_val8, on='video_id', how='left')    
+    df9 = df_orig.merge(df_val9, on='video_id', how='left')    
     
     val = Validation(df2, df3, df4, df5, df6, df7, df8, df9)
     val.plot_roc('manual_topic', 'prob')

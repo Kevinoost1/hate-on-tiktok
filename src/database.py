@@ -60,13 +60,13 @@ class Database:
             return sqlite3.connect(self.db_path)
         except:
             time.sleep(60)
-            return self.connect(self.db_path, tries-1)
+            return self.connect(tries-1)
 
     def enforce_correct_structure(self, tableName: str) -> None:
         requiredCols = {'translation': 'TEXT', 'filtered': 'BOOLEAN', 'topic': 'TEXT', 'topic_prob': 'REAL', 
                         'sent': 'TEXT', 'sent_prob': 'REAL'}
 
-        with sqlite3.connect(self.db_path) as conn:
+        with sqlite3.connect() as conn:
             cursor = conn.cursor()
             cursor.execute(f'PRAGMA table_info({tableName})') 
             existingCols = [row[1] for row in cursor.fetchall()]
@@ -81,7 +81,7 @@ class Database:
         placeholder: str = ', '.join(['?'] * len(data.columns))
         values = [tuple(row) for row in data.to_numpy()]
 
-        with self.connect(self.db_path) as conn:
+        with self.connect() as conn:
             query = f'''
             INSERT INTO {tableName} ({colNames}) VALUES ({placeholder})
             '''
@@ -94,7 +94,7 @@ class Database:
             for row in data.to_numpy()
         ]
 
-        with self.connect(self.db_path) as conn:
+        with self.connect() as conn:
             query = f"""
             UPDATE {tableName} SET {cols} WHERE id = ?
             """
@@ -103,7 +103,7 @@ class Database:
     def retrieve_data(self, tableName: str, colNames: list, restrictions: str=None, batch_size: int=None) -> pd.DataFrame:
         colNames: str = ', '.join(colNames)
 
-        with self.connect(self.db_path) as conn:
+        with self.connect() as conn:
             query: str = f'SELECT {colNames} FROM {tableName}'
             query += f' WHERE {restrictions}' if restrictions else ''
             query += f' LIMIT {batch_size}' if batch_size else ''

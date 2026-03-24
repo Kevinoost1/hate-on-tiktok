@@ -83,6 +83,7 @@ def topic():
     df_val7 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant7.csv")
     df_val8 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant8.csv")
     df_val9 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant9.csv")
+    df_val10 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant10.csv")
 
     df_orig = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/val.csv')
 
@@ -94,23 +95,43 @@ def topic():
     df7 = df_orig.merge(df_val7, on='video_id', how='left')    
     df8 = df_orig.merge(df_val8, on='video_id', how='left')    
     df9 = df_orig.merge(df_val9, on='video_id', how='left')    
+    df10 = df_orig.merge(df_val10, on='video_id', how='left')    
     
-    val = Validation(df2, df3, df4, df5, df6, df7, df8, df9)
+    val = Validation(df2, df3, df4, df5, df6, df7, df8, df9, df10)
     val.plot_roc('manual_topic', 'prob')
     val.get_classification_report('manual_topic', 'pred')
 
 def sent():
     df_val1 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant1.csv")
-    print(df_val1.columns)
+    df_val2 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant2.csv")
+    df_val3 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant3.csv")
+    df_val4 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant4.csv")
+    df_val5 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant5.csv")
+
 
     df_orig = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/val.csv')
     df1 = df_orig.merge(df_val1, on='video_id', how='left').iloc[:150, :]  
-
-    val = Validation(df1, posLabels=['Negative', 'Neutral', 'Positive'], classificationType='sent')
+    df2 = df_orig.merge(df_val2, on='video_id', how='left').iloc[:150, :]   
+    df3 = df_orig.merge(df_val3, on='video_id', how='left').iloc[:150, :]  
+    df4 = df_orig.merge(df_val4, on='video_id', how='left').iloc[:150, :]  
+    df5 = df_orig.merge(df_val5, on='video_id', how='left').iloc[:150, :]  
+     
+    val = Validation(df1, df2, df3, df4, df5, posLabels=['Negative', 'Neutral', 'Positive'], classificationType='sent')
     val.plot_roc('manual_sent', 'prob')
     val.get_classification_report('manual_sent', 'pred')
+
+def test_topic():
+    df_test0 = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/test_variant0.csv')
+    df_orig = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/test.csv')
+
+    df0 = df_orig.merge(df_test0, on='video_id', how='left')
+
+    test = Validation(df0)
+    test.plot_roc('manual_topic', 'prob')
+    test.get_classification_report('manual_topic', 'pred')
 
 if __name__ == '__main__':
     sent()
     topic()
+    test_topic()
 

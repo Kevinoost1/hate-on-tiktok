@@ -11,7 +11,7 @@ import seaborn as sns
 
 
 def main():
-    db = Database('transcript_classification')
+    db = Database('transcript_classification', db_path='/home/kevin/Documents/phd/Project-Data-Donation/database/old_db.sqlite3')
     anal = Analysis()
     data = DataExtract(db)
     graphs = Graphs()
@@ -42,21 +42,25 @@ class Analysis:
 
         user_dfs = []
         for user, user_df in df.groupby('user_id'):
-            resampled: pd.DataFrame = user_df.resample('5D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'))
+            resampled: pd.DataFrame = user_df.resample('5D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'), 
+                                                                 n_intolerance=('intolerance', 'sum'))
 
             resampled['ratio_news'] = resampled['n_politics_videos'] / resampled['n_videos']
             resampled['avg_watchtime_politics'] = resampled['watchtime_politics'] / resampled['n_politics_videos']
+            resampled['avg_intolerance'] = resampled['n_intolerance'] / resampled['n_politics_videos']
             user_dfs.append(resampled)
 
         df: pd.DataFrame = pd.concat(user_dfs)
         # RD: only keep the rows where there is 'enough' data
         df: pd.DataFrame = df[df['n_politics_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
 
-        df:pd.DataFrame = df.groupby(df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
-                                                   mean_watch_time=('avg_watchtime_politics', 'mean'), sem_watch_time=('avg_watchtime_politics', lambda x: x.std()/np.sqrt(len(x))))
+        df:pd.DataFrame = df.groupby([df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
+                                                   mean_watch_time=('avg_watchtime_politics', 'mean'), sem_watch_time=('avg_watchtime_politics', lambda x: x.std()/np.sqrt(len(x))),
+                                                   mean_intolerance=('avg_intolerance', 'mean'), sem_intolerance=('avg_intolerance', lambda x: x.std()/np.sqrt(len(x))))
 
         df['mean_ratio'] = df['mean_ratio'].rolling(window=5, min_periods=1, center=True).mean()
         df['mean_watch_time'] = df['mean_watch_time'].rolling(window=5, min_periods=1, center=True).mean()
+        df['mean_intolerance'] = df['mean_intolerance'].rolling(window=5, min_periods=1, center=True).mean()
 
         return df
 
@@ -87,7 +91,7 @@ class Graphs():
             'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
-        fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+        fig, axes = plt.subplots(3, 1, figsize=(12, 6), sharex=True)
 
         for label, date in political_dates.items():
             for ax in axes:
@@ -99,6 +103,13 @@ class Graphs():
         axes[0].set_ylabel('Ratio News, Politics & Societal Issues Videos')
         axes[0].set_ylim(0, (df['mean_ratio'] + df['sem_ratio']).max())
         axes[0].set_title('Ratio News, Politics & Societal Issues Videos over Time')
+
+        
+        axes[2].plot(df.index, df['mean_intolerance'], marker='o', color=self.colors['purple'])
+        axes[2].fill_between(df.index, df['mean_intolerance'] - df['sem_intolerance'], df['mean_intolerance'] + df['sem_intolerance'], color=self.colors['purple'], alpha=0.3)
+        axes[2].set_ylabel('Mean Intolerance Rating')
+        axes[2].set_ylim(1, 7)
+
         
         axes[1].plot(df.index, df['mean_watch_time'], marker='o', color=self.colors['brown'])
         axes[1].fill_between(df.index, df['mean_watch_time'] - df['sem_watch_time'], df['mean_watch_time'] + df['sem_watch_time'], color=self.colors['brown'], alpha=0.3)

@@ -12,8 +12,8 @@ from database import *
 
 
 class Validation:
-    def __init__(self, *validationDf: pd.DataFrame, posLabels: list=['News, Politics & Societal Issues', 'Other'], classificationType: str='topic'):
-        self.validationDfs: tuple[pd.DataFrame, ...] = validationDf
+    def __init__(self, validationDfs: list[pd.DataFrame, ...], posLabels: list=['News, Politics & Societal Issues', 'Other'], classificationType: str='topic'):
+        self.validationDfs: list[pd.DataFrame, ...] = validationDfs
         self.color_palette: list[str] = ['#001157', '#ec8e3a','#4F8B4C', '#b03aa3', '#2ca7d8', '#a0892c']
         self.posLabels: list[str] = posLabels
         self.classificationType: str = classificationType
@@ -73,65 +73,29 @@ class Validation:
 
         return reports
 
-
-def topic():
-    df_val2 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant2.csv")
-    df_val3 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant3.csv")
-    df_val4 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant4.csv")
-    df_val5 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant5.csv")
-    df_val6 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant6.csv")
-    df_val7 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant7.csv")
-    df_val8 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant8.csv")
-    df_val9 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant9.csv")
-    df_val10 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_variant10.csv")
-
-    df_orig = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/val.csv')
-
-    df2 = df_orig.merge(df_val2, on='video_id', how='left')    
-    df3 = df_orig.merge(df_val3, on='video_id', how='left')    
-    df4 = df_orig.merge(df_val4, on='video_id', how='left')    
-    df5 = df_orig.merge(df_val5, on='video_id', how='left')    
-    df6 = df_orig.merge(df_val6, on='video_id', how='left')    
-    df7 = df_orig.merge(df_val7, on='video_id', how='left')    
-    df8 = df_orig.merge(df_val8, on='video_id', how='left')    
-    df9 = df_orig.merge(df_val9, on='video_id', how='left')    
-    df10 = df_orig.merge(df_val10, on='video_id', how='left')    
-    
-    val = Validation(df2, df3, df4, df5, df6, df7, df8, df9, df10)
-    val.plot_roc('manual_topic', 'prob')
-    val.get_classification_report('manual_topic', 'pred')
-
-def sent():
-    df_val1 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant1.csv")
-    df_val2 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant2.csv")
-    df_val3 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant3.csv")
-    df_val4 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant4.csv")
-    df_val5 = pd.read_csv("/home/kevin/Documents/phd/Project-Data-Donation/testset/val_sent_variant5.csv")
-
-
-    df_orig = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/val.csv')
-    df1 = df_orig.merge(df_val1, on='video_id', how='left').iloc[:150, :]  
-    df2 = df_orig.merge(df_val2, on='video_id', how='left').iloc[:150, :]   
-    df3 = df_orig.merge(df_val3, on='video_id', how='left').iloc[:150, :]  
-    df4 = df_orig.merge(df_val4, on='video_id', how='left').iloc[:150, :]  
-    df5 = df_orig.merge(df_val5, on='video_id', how='left').iloc[:150, :]  
-     
-    val = Validation(df1, df2, df3, df4, df5, posLabels=['Negative', 'Neutral', 'Positive'], classificationType='sent')
-    val.plot_roc('manual_sent', 'prob')
-    val.get_classification_report('manual_sent', 'pred')
-
-def test_topic():
-    df_test0 = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/test_variant0.csv')
-    df_orig = pd.read_csv('/home/kevin/Documents/phd/Project-Data-Donation/testset/test.csv')
-
-    df0 = df_orig.merge(df_test0, on='video_id', how='left')
-
-    test = Validation(df0)
-    test.plot_roc('manual_topic', 'prob')
-    test.get_classification_report('manual_topic', 'pred')
+def perform_validation(variant_names: list[str, ...], classificationType='topic', ground_truth_name: str='val.csv', manual_label_name: str='manual_topic', 
+                       posLabels=['News, Politics & Societal Issues', 'Other']):
+    ground_truth: pd.DataFrame = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{ground_truth_name}")
+    merged_dfs: list[pd.DataFrame, ...] = []
+    for i, v in enumerate(variant_names):
+        df = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{v}")
+        if classificationType == 'sent':
+            merged_dfs.append(ground_truth.merge(df, on='video_id', how='left').iloc[:150, :])
+        else:
+            merged_dfs.append(ground_truth.merge(df, on='video_id', how='left')) 
+        
+    val = Validation(merged_dfs, classificationType=classificationType, posLabels=posLabels)
+    val.plot_roc(manual_label_name)
+    val.get_classification_report(manual_label_name, 'pred')
 
 if __name__ == '__main__':
-    sent()
-    topic()
-    test_topic()
+    perform_validation(variant_names=['val_sent_variant1.csv', 'val_sent_variant2.csv',
+                        'val_sent_variant3.csv', 'val_sent_variant4.csv', 'val_sent_variant5.csv'], classificationType='sent', 
+                       manual_label_name='manual_sent', posLabels=['Negative', 'Neutral', 'Positive'])
+
+    perform_validation(variant_names=['val_variant2.csv', 'val_variant3.csv', 'val_variant4.csv', 'val_variant5.csv',
+                         'val_variant6.csv', 'val_variant7.csv', 'val_variant8.csv', 'val_variant9.csv',
+                         'val_variant10.csv'])
+
+    perform_validation(variant_names=['test_variant0.csv'], classificationType='topic_test', ground_truth_name='test.csv')
 

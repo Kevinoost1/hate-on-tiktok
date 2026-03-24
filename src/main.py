@@ -5,11 +5,15 @@ import pandas as pd
 def main():
     preprocess = Preprocess()
     database = Database('transcript_classification')
+    database.enforce_correct_structure('transcript_classification') 
     
-    df = database.retrieve_data(tableName='transcript_classification', colNames=['id', 'content'])
+    df = database.retrieve_data(tableName='transcript_classification', colNames=['id', 'language_id', 'content'], 
+                                restrictions='translation IS NULL', batch_size=10000)
 
-    cleaned = preprocess.preprocess_text(df, 'content')
-    database.update_data('transcript_classification', cleaned)
+    translated = preprocess.generate_translation(df, 'transcript_classification', 'language_id')
+    filtered = preprocess.filter_on_heuristics(df, 'translation')
+    
+    database.update_data('transcript_classification', filtered)
 
 if __name__ == '__main__':
     main()

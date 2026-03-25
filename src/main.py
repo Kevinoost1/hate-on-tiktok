@@ -10,7 +10,7 @@ def main():
     df = database.retrieve_data(tableName='transcript_classification', colNames=['id', 'language_id', 'content'], 
                                 restrictions='translation IS NULL', batch_size=10000)
 
-    translated = preprocess.generate_translation(df, 'transcript_classification', 'language_id')
+    translated = preprocess.generate_translation(df, 'content', 'language_id')
     filtered = preprocess.filter_on_heuristics(df, 'translation')
     
     database.update_data('transcript_classification', filtered)

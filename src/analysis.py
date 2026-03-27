@@ -7,6 +7,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import json
 import seaborn as sns
+import scipy.stats as stats
 
 
 
@@ -15,17 +16,19 @@ def main():
     anal = Analysis()
     data = DataExtract(db)
     graphs = Graphs()
+    stats = Statistics()
 
-    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series()
-
+    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True)
+    
     politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
     civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
+    # desc = stats.get_descriptives(dfs)
 
-    politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
-    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
+    # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
  
-    anal.get_graph_report(politics_t_plot, civility_plot)
-    
+    graphs.get_graph_report(politics_t_plot, civility_plot)
+
 
 class Analysis:
     def __init__(self):
@@ -34,29 +37,30 @@ class Analysis:
 
     def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=8) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()
-        df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True)        
+        df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True) 
         df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
         df['watchtime_politics'] = df['watch_time_s'] * df['news_politics']
         
         df: pd.DataFrame = df.set_index(dateColumnName)
+        df['high_intolerance'] = (df['intolerance'] > 5).astype(int)
 
         user_dfs = []
         for user, user_df in df.groupby('user_id'):
             resampled: pd.DataFrame = user_df.resample('5D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'), 
-                                                                 n_intolerance=('intolerance', 'sum'))
+                                                                 n_high_intolerance=('high_intolerance', 'sum'))
 
             resampled['ratio_news'] = resampled['n_politics_videos'] / resampled['n_videos']
             resampled['avg_watchtime_politics'] = resampled['watchtime_politics'] / resampled['n_politics_videos']
-            resampled['avg_intolerance'] = resampled['n_intolerance'] / resampled['n_politics_videos']
+            resampled['ratio_high_intolerance'] = resampled['n_high_intolerance'] / resampled['n_politics_videos']
             user_dfs.append(resampled)
 
         df: pd.DataFrame = pd.concat(user_dfs)
         # RD: only keep the rows where there is 'enough' data
         df: pd.DataFrame = df[df['n_politics_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
 
-        df:pd.DataFrame = df.groupby([df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
+        df:pd.DataFrame = df.groupby(df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
                                                    mean_watch_time=('avg_watchtime_politics', 'mean'), sem_watch_time=('avg_watchtime_politics', lambda x: x.std()/np.sqrt(len(x))),
-                                                   mean_intolerance=('avg_intolerance', 'mean'), sem_intolerance=('avg_intolerance', lambda x: x.std()/np.sqrt(len(x))))
+                                                   mean_intolerance=('ratio_high_intolerance', 'mean'), sem_intolerance=('ratio_high_intolerance', lambda x: x.std()/np.sqrt(len(x))))
 
         df['mean_ratio'] = df['mean_ratio'].rolling(window=5, min_periods=1, center=True).mean()
         df['mean_watch_time'] = df['mean_watch_time'].rolling(window=5, min_periods=1, center=True).mean()
@@ -73,6 +77,7 @@ class Analysis:
             avg_impoliteness=(impolitenessColumnName, 'mean'),
             avg_intolerance=(intoleranceColumnName, 'mean')
         ))
+        return results
 
         
 class Graphs():
@@ -108,7 +113,7 @@ class Graphs():
         axes[2].plot(df.index, df['mean_intolerance'], marker='o', color=self.colors['purple'])
         axes[2].fill_between(df.index, df['mean_intolerance'] - df['sem_intolerance'], df['mean_intolerance'] + df['sem_intolerance'], color=self.colors['purple'], alpha=0.3)
         axes[2].set_ylabel('Mean Intolerance Rating')
-        axes[2].set_ylim(1, 7)
+        axes[2].set_ylim(0, 1)
 
         
         axes[1].plot(df.index, df['mean_watch_time'], marker='o', color=self.colors['brown'])
@@ -148,13 +153,41 @@ class Graphs():
         with PdfPages('graphs.pdf') as pdf:
             for fig in figs:
                 pdf.savefig(fig) 
-    
+
+class Statistics:
+    def __init__(self, outputName: str='stats.json'):
+        self.outputName: str = outputName
+        self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
+        
+    def get_descriptives(self, timeSeriesDfs) -> dict[str, float]:
+        df: pd.DataFrame = timeSeriesDfs[0]
+
+        per_user: dict[str, list[float, ...]] = {} 
+        per_user['intolerance'] = [x for x in df.groupby('user_id').agg(avg_intolerance=('intolerance', 'mean'))]
+        print(per_user)
+
+        for user_df in df.groupby('user_id'):
+            per_user['intolerance'] = per_user['intolerance'].items()(user_df['intolerance'].mean())
+            per_user['impoliteness'] = per_user['impoliteness'].items()(user_Df['impoliteness'].mean())
+
+            for key, label in {'ll3_topic_single_pred': 'Politics & Social Issues', 'll3_sent_cat_pred': 'Positive', 'll3_sent_cat_pred': 'Negative', 'll3_sent_cat_pred': 'Neutral'}.items():
+                per_user[label] = per_user[label].append((user_df[user_df[key] == label]).astype(int).sum() / len(user_df))
+
+        descriptives: dict[str, float] = {}
+        for label, distribution in per_user.items():
+            descriptives[f'{label}_mean'] = distribution.mean()
+            descriptives[f'{label}_sd'] = distribution.sd()
+            descriptives[f'{label}_range'] = [distribution.min(), distribution.max()]
+
+        self.jsonContent['descriptives'].append(descriptives)
+        return descriptives
+ 
 
 class DataExtract:
     def __init__(self, database: Database):
         self.database: Database = database
 
-    def request_time_series(self, channelOrdering: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
+    def request_time_series(self, channelOrdering: bool=False, get_qs: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', 'll3_topic_single_pred', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
@@ -170,6 +203,12 @@ class DataExtract:
         timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(classifications, on='video_id', how='left') \
             .merge(videos, on='video_id', how='left') \
             .merge(channels, on='author_id', how='left')
+
+        if get_qs:
+            qs: pd.DataFrame = self.database.retrieve_data(tableName='questionnaires', colNames=['name', 'age'])
+            users: pd.DataFrame = self.database.retrieve_data(tableName='users', colNames=['id AS user_id', 'name']).merge(qs, on='name', how='inner')
+            timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(users, on='user_id', how='inner').drop(columns=['name']) 
+            timeSeriesDf = self.rollback_age(timeSeriesDf)
         
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
         if channelOrdering: 
@@ -194,11 +233,23 @@ class DataExtract:
         return df[df['new_session'] == 0]
 
     @staticmethod
+    def rollback_age(df: pd.DataFrame, dateColumnName: str='date_ymd') -> pd.DataFrame:
+        df[dateColumnName] = pd.to_datetime(df[dateColumnName], yearfirst=True)
+        last_date = df.groupby('user_id')[dateColumnName].transform('max')
+
+        delta_year = last_date.dt.year - df[dateColumnName].dt.year
+        df['age'] = df['age'] - delta_year
+        return df
+
+
+    @staticmethod
     def load_channels(channelDefinitionFileName: str='/home/kevin/Documents/phd/Project-Data-Donation/src/channel_def.json') -> (list[str, ...], list[str, ...]):
         with open(channelDefinitionFileName, 'r') as f:
             channels = json.load(f)
         
         return channels['official'], channels['unofficial'], channels['ordering']
+
+
 
 
 

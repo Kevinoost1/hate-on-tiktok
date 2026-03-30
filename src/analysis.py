@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import json
 import seaborn as sns
 import scipy.stats as stats
+from lifelines import KaplanMeierFitter
 
 
 
@@ -22,12 +23,14 @@ def main():
     
     politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
     civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
+    surivival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
     # desc = stats.get_descriptives(dfs)
 
-    # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
-    # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
+    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    km_plot: plt.Figure = graphs.create_km_graph(surivival_dfs)
  
-    graphs.get_graph_report(politics_t_plot, civility_plot)
+    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
 
 class Analysis:
@@ -69,7 +72,7 @@ class Analysis:
         return df
 
 
-    def construct_civility(self, timeSeriesDf: pd.Dataframe, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> plt.Figure:
+    def construct_civility(self, timeSeriesDf: pd.Dataframe, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'official', topicColumnName, intoleranceColumnName, impolitenessColumnName]]
         df: pd.DataFrame = df[df[topicColumnName] == 'Politics & Social Issues']
  
@@ -79,10 +82,37 @@ class Analysis:
         ))
         return results
 
+    def construct_survival(self, timeSeriesDf: pd.DataFrame, topicColumnName:str= 'll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred', cutoff: int=3) -> pd.DataFrame:
+        df: pd.DataFrame = timeSeriesDf.copy()[[topicColumnName, sentColumnName, 'watch_time_s', 'age']].assign(event=1)
+        df = df[df['watch_time_s'] >= cutoff]
+        return df
         
 class Graphs():
     def __init__(self):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
+        
+    def create_km_graph(self, dfs: list[pd.DataFrame], topicColumnName: str='ll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred') -> plt.Figure():
+        df: pd.DataFrame = dfs[0]
+        df.loc[df['ll3_topic_single_pred'] != 'Politics & Social Issues', 'll3_topic_single_pred'] = 'Other'
+
+        km = KaplanMeierFitter()
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+        for i, (classification, column) in enumerate({'topic': topicColumnName, 'sent': sentColumnName}.items()):
+            ax_classification = axes[i]
+
+            for idx, (label, df_label) in enumerate(df.groupby(column)):
+                km.fit(durations=df_label['watch_time_s'], event_observed=df_label['event'], label=str(label))
+                km.plot_survival_function(ax=ax_classification, color=list(self.colors.values())[idx])
+
+            ax_classification.set_title(f"Surivival by {classification}")
+            ax_classification.set_xlabel('Watch Time (sec)')
+            ax_classification.set_ylabel('Proportion of Video\'s Still Watched')
+
+        plt.tight_layout()
+
+        return fig
+
                 
     def create_timeseries_graph(self, dfs: list[pd.DataFrame]): 
         df = dfs[0]
@@ -124,7 +154,6 @@ class Graphs():
 
         plt.xticks(rotation=45)
         plt.tight_layout()
-        plt.show()
 
         return fig         
 
@@ -145,7 +174,6 @@ class Graphs():
         axes[1].set_xticklabels(["Unofficial","Official"])
 
         plt.tight_layout() 
-        plt.show()
 
         return fig
 

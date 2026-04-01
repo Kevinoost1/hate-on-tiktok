@@ -25,6 +25,7 @@ def main():
     # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
     # surivival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
     desc = stats.get_descriptives(dfs)
+    stats.get_civility(dfs)
     stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
@@ -220,7 +221,29 @@ class Statistics:
 
         self.jsonContent['Descriptives'].append(descriptives)
         return descriptives
-    
+
+    def get_civility(self, timeSeriesDfs) -> dict[str, float]:
+        df: pd.DataFrame = timeSeriesDfs[0].copy()
+        per_user = df.groupby(['user_id', 'official']).agg(
+            avg_intolerance=('intolerance', 'mean'),
+            avg_impoliteness=('impoliteness', 'mean')
+        )
+        official = per_user.xs(1, level='official')
+        unofficial = per_user.xs(0, level='official')
+
+        t_int, p_int = stats.ttest_ind(official['avg_intolerance'], unofficial['avg_intolerance'], equal_var=False)
+        t_imp, p_imp = stats.ttest_ind(official['avg_impoliteness'], unofficial['avg_impoliteness'], equal_var=False)
+
+        means = per_user.groupby('official').agg(
+            avg_intolerance_mean=('avg_intolerance', 'mean'),
+            avg_intolerance_std=('avg_intolerance', 'std'),
+            avg_intolerance_se=('avg_intolerance', lambda x: x.std() / np.sqrt(len(x))),
+            
+            avg_impoliteness_mean=('avg_impoliteness', 'mean'),
+            avg_impoliteness_std=('avg_impoliteness', 'std'),
+            avg_impoliteness_se=('avg_impoliteness', lambda x: x.std() / np.sqrt(len(x))),
+        )
+          
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:
             json.dump(self.jsonContent, f, indent=4)

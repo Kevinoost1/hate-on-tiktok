@@ -1,16 +1,10 @@
-import sqlite3
-from transformers import AutoTokenizer, AutoModelForCausalLM, MBartForConditionalGeneration, MBart50Tokenizer
+from transformers import MBartForConditionalGeneration, MBart50Tokenizer
 import torch
 import re
 import pandas as pd
-import shutil
-from datetime import datetime
-import time
 from torch.cuda.amp import autocast
 from collections import defaultdict
 import json
-import os
-from dotenv import load_dotenv
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,7 +54,7 @@ class Preprocess:
 
     def match_text(self, transcript: str) -> str:
         if re.match(r'{"utterances":', transcript):
-            transcript = self.clean_json_utterances(transcript)
+            transcript: str = self.clean_json_utterances(transcript)
 
         newText: str = ''
         for word in transcript.split():
@@ -85,12 +79,12 @@ class Preprocess:
         return " ".join([p for p in parts if p]).strip()
 
     def generate_translation(self, df: pd.DataFrame, transcriptColumn:str, languageIdColumn: str) -> pd.DataFrame:
-        indexes: [int] = df.index.tolist()
-        transcripts: [str] = df[transcriptColumn].tolist()
-        language_ids: [int] = df[languageIdColumn].tolist()
+        indexes: list[int, ...] = df.index.tolist()
+        transcripts: list[str, ...] = df[transcriptColumn].tolist()
+        language_ids: list[int, ...] = df[languageIdColumn].tolist()
 
-        parts: [str] = []
-        mapping: [int] = []
+        parts: list[str, ...] = []
+        mapping: list[int, ...] = []
 
         for i, (idx, transcript, langId) in enumerate(zip(indexes, transcripts, language_ids)):
             if langId == 18:
@@ -100,44 +94,44 @@ class Preprocess:
             elif langId == 2:
                 df.at[idx, 'translation'] = transcript
             else:
-                df.at[idx, 'translation'] = 'OTHER_LANG"'
+                df.at[idx, 'translation'] = 'OTHER_LANG'
 
         model = MBartForConditionalGeneration.from_pretrained(self.translationModelName).to(self.device).eval()
         tokenizer = MBart50Tokenizer.from_pretrained(self.translationModelName, src_lang="nl_XX", tgt_lang="eng_XX")
-        decoded: list = [None] * len(parts)
+        decoded: list[None] | list[str, ...] = [None] * len(parts)
 
         for start in range(0, len(parts), self.translationBatchSize):
-            batch: [str] = parts[start:start + self.translationBatchSize]
+            batch: list[str] = parts[start:start + self.translationBatchSize]
 
-            tokenized: {int: torch.tensor} = tokenizer(batch, return_tensors="pt", padding=True).to(self.device)
+            tokenized: Dict[int: torch.Tensor] = tokenizer(batch, return_tensors="pt", padding=True).to(self.device)
 
             with torch.no_grad():
                 with autocast(dtype=torch.float16):
-                    output: {int: torch.tensor} = model.generate(**tokenized, num_beams=1)
+                    output: Dict[int: torch.Tensor] = model.generate(**tokenized, num_beams=1)
 
             decoded_batch: [str] = tokenizer.batch_decode(output, skip_special_tokens=True)
             for i, transcript in enumerate(decoded_batch):
                 decoded[start + i] = transcript.strip()
 
-            accum = defaultdict(list)
-            for part_idx, label in enumerate(mapping):
-                text_part: str = decoded[part_idx] or ''
-                accum[label].append(text_part)
+        accum = defaultdict(list)
+        for part_idx, label in enumerate(mapping):
+            text_part: str = decoded[part_idx] or ''
+            accum[label].append(text_part)
 
-            for label, parts_list in accum.items():
-                joined_text: str = ' '.join(p for p in parts_list if p)
-                df.at[label, 'translation'] = joined_text
+        for label, parts_list in accum.items():
+            joined_text: str = ' '.join(p for p in parts_list if p)
+            df.at[label, 'translation'] = joined_text
 
         return df
 
     @staticmethod
-    def split_text(transcript: str, maxLength: int=750) -> [str]:
+    def split_text(transcript: str, maxLength: int=750) -> list[str] | list[str, ...]:
         if len(transcript) <= maxLength:
             return [transcript]
 
         parts: list = []
         while len(transcript) > maxLength:
-            split: [str] = transcript[:maxLength].rfind(' ')
+            split: list[str] = transcript[:maxLength].rfind(' ')
 
             parts.append(transcript[:split + 1].strip())
             transcript: str = transcript[split + 1:].strip()

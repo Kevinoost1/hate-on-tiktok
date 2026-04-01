@@ -21,16 +21,17 @@ def main():
 
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True)
     
-    politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
-    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
-    surivival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
-    # desc = stats.get_descriptives(dfs)
+    # politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
+    # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
+    # surivival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
+    desc = stats.get_descriptives(dfs)
+    stats.dump_to_json()
 
-    politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
-    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
-    km_plot: plt.Figure = graphs.create_km_graph(surivival_dfs)
+    # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
+    # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    # km_plot: plt.Figure = graphs.create_km_graph(surivival_dfs)
  
-    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
+    # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
 
 class Analysis:
@@ -191,27 +192,35 @@ class Statistics:
         self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
         
     def get_descriptives(self, timeSeriesDfs) -> dict[str, float]:      # TO DO: does not currently work
-        df: pd.DataFrame = timeSeriesDfs[0]
+        df: pd.DataFrame = timeSeriesDfs[0].copy()
 
-        per_user: dict[str, list[float, ...]] = {} 
-        per_user['intolerance'] = [x for x in df.groupby('user_id').agg(avg_intolerance=('intolerance', 'mean'))]
-        print(per_user)
+        df['news_politics'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
+        for sent in ['Positive', 'Negative', 'Neutral']:
+            df[sent] = (df['ll3_sent_cat_pred'] == sent).astype(int)
 
-        for user_df in df.groupby('user_id'):
-            per_user['intolerance'] = per_user['intolerance'].items()(user_df['intolerance'].mean())
-            per_user['impoliteness'] = per_user['impoliteness'].items()(user_Df['impoliteness'].mean())
+        per_user = df.groupby('user_id').agg(
+            avg_intolerance=('intolerance', 'mean'),
+            avg_impoliteness=('impoliteness', 'mean'),
+            n_videos=('video_id', 'count'),
+            n_politics=('news_politics', 'sum'),
+            Positive=('Positive', 'sum'), 
+            Negative=('Negative', 'sum'), 
+            Neutral=('Neutral', 'sum')
+        )
+        per_user['ratio_news'] = per_user['n_politics'] / per_user['n_videos']
+        for sent in ['Positive', 'Negative', 'Neutral']:
+            per_user[f'ratio_{sent}'] = per_user[sent] / per_user['n_videos']
+ 
+        per_user = per_user[['avg_intolerance', 'avg_impoliteness', 'ratio_news', 'ratio_Positive', 'ratio_Negative', 'ratio_Neutral']]
+        descriptives = per_user.agg(['mean', 'std', 'max', 'min']).to_dict()
 
-            for key, label in {'ll3_topic_single_pred': 'Politics & Social Issues', 'll3_sent_cat_pred': 'Positive', 'll3_sent_cat_pred': 'Negative', 'll3_sent_cat_pred': 'Neutral'}.items():
-                per_user[label] = per_user[label].append((user_df[user_df[key] == label]).astype(int).sum() / len(user_df))
-
-        descriptives: dict[str, float] = {}
-        for label, distribution in per_user.items():
-            descriptives[f'{label}_mean'] = distribution.mean()
-            descriptives[f'{label}_sd'] = distribution.sd()
-            descriptives[f'{label}_range'] = [distribution.min(), distribution.max()]
-
-        self.jsonContent['descriptives'].append(descriptives)
+        self.jsonContent['Descriptives'].append(descriptives)
         return descriptives
+    
+    def dump_to_json(self):
+        with open('stats.json', 'w', encoding='utf-8') as f:
+            json.dump(self.jsonContent, f, indent=4)
+
 
     # TO DO: specific test statistics
  

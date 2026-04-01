@@ -224,6 +224,10 @@ class Statistics:
 
     def get_civility(self, timeSeriesDfs) -> dict[str, float]:
         df: pd.DataFrame = timeSeriesDfs[0].copy()
+
+        # RD: They had NaN on civility scores       # TO DO: remember what was up with these people
+        df = df[(df['user_id'] != 55) & (df['user_id'] != 52)]
+
         per_user = df.groupby(['user_id', 'official']).agg(
             avg_intolerance=('intolerance', 'mean'),
             avg_impoliteness=('impoliteness', 'mean')
@@ -243,6 +247,7 @@ class Statistics:
             avg_impoliteness_std=('avg_impoliteness', 'std'),
             avg_impoliteness_se=('avg_impoliteness', lambda x: x.std() / np.sqrt(len(x))),
         )
+        print(t_int, p_int)
           
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:

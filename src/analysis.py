@@ -191,10 +191,11 @@ class Statistics:
         self.outputName: str = outputName
         self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
         
-    def get_descriptives(self, timeSeriesDfs) -> dict[str, float]:      # TO DO: does not currently work
+    def get_descriptives(self, timeSeriesDfs) -> dict[str, float]:
         df: pd.DataFrame = timeSeriesDfs[0].copy()
 
         df['news_politics'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
+        df['videos_with_transcript'] = (df['ll3_topic_single_pred'].notna()).astype(int)
         for sent in ['Positive', 'Negative', 'Neutral']:
             df[sent] = (df['ll3_sent_cat_pred'] == sent).astype(int)
 
@@ -202,6 +203,10 @@ class Statistics:
             avg_intolerance=('intolerance', 'mean'),
             avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
+            n_unique_videos=('video_id', 'nunique'),
+            n_videos_w_transcript=('videos_with_transcript', 'sum'),
+            n_unique_videos_w_transcript=('video_id', 
+                lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
             n_politics=('news_politics', 'sum'),
             Positive=('Positive', 'sum'), 
             Negative=('Negative', 'sum'), 
@@ -211,8 +216,7 @@ class Statistics:
         for sent in ['Positive', 'Negative', 'Neutral']:
             per_user[f'ratio_{sent}'] = per_user[sent] / per_user['n_videos']
  
-        per_user = per_user[['avg_intolerance', 'avg_impoliteness', 'ratio_news', 'ratio_Positive', 'ratio_Negative', 'ratio_Neutral']]
-        descriptives = per_user.agg(['mean', 'std', 'max', 'min']).to_dict()
+        descriptives = per_user.agg(['mean', 'std', 'max', 'min', 'count', 'sum']).to_dict()
 
         self.jsonContent['Descriptives'].append(descriptives)
         return descriptives

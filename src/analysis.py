@@ -9,7 +9,7 @@ import json
 import seaborn as sns
 import scipy.stats as stats
 from lifelines import KaplanMeierFitter
-
+import zstandard as zstd
 
 
 def main():
@@ -90,7 +90,9 @@ class Analysis:
 class Graphs():
     def __init__(self):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
-        
+
+
+    # TO DO: make the graph nicer    
     def create_km_graph(self, dfs: list[pd.DataFrame], topicColumnName: str='ll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred') -> plt.Figure():
         df: pd.DataFrame = dfs[0]
         df.loc[df['ll3_topic_single_pred'] != 'Politics & Social Issues', 'll3_topic_single_pred'] = 'Other'
@@ -114,6 +116,7 @@ class Graphs():
         return fig
 
                 
+    # TO DO: make the graph nicer
     def create_timeseries_graph(self, dfs: list[pd.DataFrame]): 
         df = dfs[0]
 
@@ -187,7 +190,7 @@ class Statistics:
         self.outputName: str = outputName
         self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
         
-    def get_descriptives(self, timeSeriesDfs) -> dict[str, float]:
+    def get_descriptives(self, timeSeriesDfs) -> dict[str, float]:      # TO DO: does not currently work
         df: pd.DataFrame = timeSeriesDfs[0]
 
         per_user: dict[str, list[float, ...]] = {} 
@@ -209,6 +212,8 @@ class Statistics:
 
         self.jsonContent['descriptives'].append(descriptives)
         return descriptives
+
+    # TO DO: specific test statistics
  
 
 class DataExtract:
@@ -217,7 +222,7 @@ class DataExtract:
 
     def request_time_series(self, channelOrdering: bool=False, get_qs: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
-                                                                    colNames=['video_id', 'll3_topic_single_pred', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
+                                                                    colNames=['video_id', 'll3_topic_single_pred', 'translation', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
                                                          colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
 
@@ -260,6 +265,9 @@ class DataExtract:
         # RD: for now, drop the 'new_session != 0' rows. At those points the watch_time_s is not accurate (artificially large)
         return df[df['new_session'] == 0]
 
+    # TO DO: implement retrieve_video_durations()
+    #   - Find a way to make it memory efficient or to clear memory when it is full
+
     @staticmethod
     def rollback_age(df: pd.DataFrame, dateColumnName: str='date_ymd') -> pd.DataFrame:
         df[dateColumnName] = pd.to_datetime(df[dateColumnName], yearfirst=True)
@@ -268,7 +276,6 @@ class DataExtract:
         delta_year = last_date.dt.year - df[dateColumnName].dt.year
         df['age'] = df['age'] - delta_year
         return df
-
 
     @staticmethod
     def load_channels(channelDefinitionFileName: str='/home/kevin/Documents/phd/Project-Data-Donation/src/channel_def.json') -> (list[str, ...], list[str, ...]):

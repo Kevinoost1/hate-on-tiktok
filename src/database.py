@@ -47,12 +47,12 @@ It contains the following general methods:
 """
 
 class Database:
-    def __init__(self, transcriptTableName, db_path: str=BASE_DIR / 'database' / 'db.sqlite3'):
+    def __init__(self, transcriptTableName: str='transcript_classification', db_path: str=BASE_DIR / 'database' / 'db.sqlite3'):
         self.BASE_DIR: str = BASE_DIR 
         self.db_path: str = db_path
         self.transcriptTableName: str = transcriptTableName
  
-    def connect(self, tries=10) -> sqlite3.Connection:
+    def connect(self, tries: int=10) -> sqlite3.Connection:
         if tries == 0:
             raise Exception('Failed to connect after 10 tries')
 
@@ -70,7 +70,6 @@ class Database:
             cursor = conn.cursor()
             cursor.execute(f'PRAGMA table_info({tableName})') 
             existingCols = [row[1] for row in cursor.fetchall()]
-            print(existingCols)
 
         for col, type in zip(requiredCols.keys(), requiredCols.values()):
             if col not in existingCols:

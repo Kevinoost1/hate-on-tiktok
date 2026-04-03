@@ -8,7 +8,7 @@ def main():
     database = Database('transcript_classification')
     database.enforce_correct_structure('transcript_classification') 
     
-    df = database.retrieve_data(tableName='transcript_classification LEFT JOIN videos v ON tc.video_id=v.id', 
+    df = database.retrieve_data(tableName='transcript_classification tc LEFT JOIN videos v ON tc.video_id=v.id', 
                                 colNames=['tc.id', 'tc.video_id', 'tc.translation', 'v.desc'], 
                                 restrictions='(topic IS NULL) AND (filtered = 0)', batch_size=10000)
 

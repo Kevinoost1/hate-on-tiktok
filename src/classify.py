@@ -1,5 +1,6 @@
 import pandas as pd
 import sqlite3
+from database import *
 
 
 '''
@@ -29,10 +30,15 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv') ->
     results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
 
-    id_df['pred'] = results_df['pred']
-    id_df['prob'] = results_df['prob']
-    id_df['probs'] = results_df['probs']
+    id_df['topic'] = results_df['pred']
+    id_df['topic_prob'] = results_df['probs']
 
     return id_df
 
+
+if __name__=='__main__':
+    db = Database('transcript_classification')
+    id_df = get_results()
+    db.update_data('transcript_classification', id_df)
+    
 

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import json
 import seaborn as sns
 import scipy.stats as stats
-from lifelines import KaplanMeierFitter
+from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 
 
@@ -22,10 +22,11 @@ def main():
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True)
     
     # politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
-    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
-    # surivival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
-    desc = stats.get_descriptives(dfs)
-    stats.get_civility(civility_dfs)
+    # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
+    survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
+    # desc = stats.get_descriptives(dfs)
+    # stats.get_civility(civility_dfs)
+    stats.get_survival(survival_dfs)
     stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
@@ -86,7 +87,11 @@ class Analysis:
 
     def construct_survival(self, timeSeriesDf: pd.DataFrame, topicColumnName:str= 'll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred', cutoff: int=3) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()[[topicColumnName, sentColumnName, 'watch_time_s', 'age']].assign(event=1)
+
+        # RD: A cutoff was set at 3 sec, in line with Meta's policy for Instagram, to count a video as viewed
         df = df[df['watch_time_s'] >= cutoff]
+
+        df.loc[df['ll3_topic_single_pred'] != 'Politics & Social Issues', 'll3_topic_single_pred'] = 'Other'
         return df
         
 class Graphs():
@@ -97,7 +102,6 @@ class Graphs():
     # TO DO: make the graph nicer    
     def create_km_graph(self, dfs: list[pd.DataFrame], topicColumnName: str='ll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred') -> plt.Figure():
         df: pd.DataFrame = dfs[0]
-        df.loc[df['ll3_topic_single_pred'] != 'Politics & Social Issues', 'll3_topic_single_pred'] = 'Other'
 
         km = KaplanMeierFitter()
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -160,7 +164,7 @@ class Graphs():
         plt.xticks(rotation=45)
         plt.tight_layout()
 
-        return fig         
+        return fig       
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]):
         results = dfs[0]
@@ -233,6 +237,7 @@ class Statistics:
         self.jsonContent['Descriptives'].append(descriptives)
 
         return descriptives
+
     def get_civility(self, civilityDfs) -> dict[str, float]:
         df: pd.DataFrame = civilityDfs[0].copy()
         paired: pd.DataFrame = df.pivot(index='user_id', columns='official', values=['avg_intolerance', 'avg_impoliteness'])
@@ -260,6 +265,23 @@ class Statistics:
         self.jsonContent['Civility'].append(means)
 
         return means
+
+    def get_survival(self, survival_dfs: pd.DataFrame):
+        df = survival_dfs[0][['ll3_topic_single_pred', 'll3_sent_cat_pred', 'event', 'watch_time_s']].copy()
+
+        # RD: Using Other and Neutral as references
+        df['ll3_topic_single_pred'] = pd.Categorical(df['ll3_topic_single_pred'], categories=['Other', 'Politics & Social Issues'])
+        df['ll3_sent_cat_pred'] = pd.Categorical(df['ll3_sent_cat_pred'], categories=['Neutral', 'Negative', 'Positive'])
+        df = pd.get_dummies(df, columns=['ll3_topic_single_pred', 'll3_sent_cat_pred'], drop_first=True)
+
+        cph = CoxPHFitter()
+        cph.fit(df, duration_col='watch_time_s', event_col='event')
+
+        summary = cph.summary.to_dict()
+        self.jsonContent['Watchtime'].append(summary)
+
+        return summary
+        
 
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:

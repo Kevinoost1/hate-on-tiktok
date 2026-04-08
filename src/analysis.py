@@ -22,10 +22,10 @@ def main():
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True)
     
     # politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
-    # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
+    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
     # surivival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
     desc = stats.get_descriptives(dfs)
-    stats.get_civility(dfs)
+    stats.get_civility(civility_dfs)
     stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
@@ -192,7 +192,7 @@ class Statistics:
         self.outputName: str = outputName
         self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
         
-    def get_descriptives(self, timeSeriesDfs) -> dict[str, float]:
+    def get_descriptives(self, timeSeriesDfs) -> dict[str, dict[str, float]]:
         df: pd.DataFrame = timeSeriesDfs[0].copy()
 
         df['news_politics'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
@@ -200,7 +200,7 @@ class Statistics:
         for sent in ['Positive', 'Negative', 'Neutral']:
             df[sent] = (df['ll3_sent_cat_pred'] == sent).astype(int)
 
-        per_user = df.groupby('user_id').agg(
+        per_user_num: pd.DataFrame = df.groupby('user_id').agg(
             avg_intolerance=('intolerance', 'mean'),
             avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
@@ -211,34 +211,40 @@ class Statistics:
             n_politics=('news_politics', 'sum'),
             Positive=('Positive', 'sum'), 
             Negative=('Negative', 'sum'), 
-            Neutral=('Neutral', 'sum')
-        )
-        per_user['ratio_news'] = per_user['n_politics'] / per_user['n_videos']
+            Neutral=('Neutral', 'sum'), 
+
+            age=('age', 'last'),
+            political_preference=('political_preference', 'first'),
+
+        )   
+        per_user_num['ratio_news'] = per_user_num['n_politics'] / per_user_num['n_videos']
         for sent in ['Positive', 'Negative', 'Neutral']:
-            per_user[f'ratio_{sent}'] = per_user[sent] / per_user['n_videos']
- 
-        descriptives = per_user.agg(['mean', 'std', 'max', 'min', 'count', 'sum']).to_dict()
+            per_user_num[f'ratio_{sent}'] = per_user_num[sent] / per_user_num['n_videos']
 
-        self.jsonContent['Descriptives'].append(descriptives)
-        return descriptives
-
-    def get_civility(self, timeSeriesDfs) -> dict[str, float]:
-        df: pd.DataFrame = timeSeriesDfs[0].copy()
-
-        # RD: They had NaN on civility scores       # TO DO: remember what was up with these people
-        df = df[(df['user_id'] != 55) & (df['user_id'] != 52)]
-
-        per_user = df.groupby(['user_id', 'official']).agg(
-            avg_intolerance=('intolerance', 'mean'),
-            avg_impoliteness=('impoliteness', 'mean')
+        per_user_cat: pd.DataFrame = df.groupby('user_id').agg(
+           gender=('gender', 'first'), education=('education', 'first')
         )
-        official = per_user.xs(1, level='official')
-        unofficial = per_user.xs(0, level='official')
+ 
+        descriptives_num = per_user_num.agg(['mean', 'std', 'median', 'max', 'min', 'count', 'sum']).to_dict()
+        descriptives_cat = {col: per_user_cat[col].value_counts().to_dict() for col in per_user_cat.columns}
 
-        t_int, p_int = stats.ttest_ind(official['avg_intolerance'], unofficial['avg_intolerance'], equal_var=False)
-        t_imp, p_imp = stats.ttest_ind(official['avg_impoliteness'], unofficial['avg_impoliteness'], equal_var=False)
+        descriptives = {'Numeric': descriptives_num, 'Categorical': descriptives_cat}
+        
+        self.jsonContent['Descriptives'].append(descriptives)
 
-        means = per_user.groupby('official').agg(
+        return descriptives
+    def get_civility(self, civilityDfs) -> dict[str, float]:
+        df: pd.DataFrame = civilityDfs[0].copy()
+        paired: pd.DataFrame = df.pivot(index='user_id', columns='official', values=['avg_intolerance', 'avg_impoliteness'])
+
+        # RD: Some people had NaN (likely to little videos from 'official')       # TO DO: remember what was up with these people
+        df = df.dropna()
+        paired = paired.dropna()
+
+        int_results = stats.ttest_rel(paired['avg_intolerance'][1], paired['avg_intolerance'][0], alternative='less') 
+        imp_results = stats.ttest_rel(paired['avg_impoliteness'][1], paired['avg_impoliteness'][0], alternative='less')
+
+        means = df.groupby('official').agg(
             avg_intolerance_mean=('avg_intolerance', 'mean'),
             avg_intolerance_std=('avg_intolerance', 'std'),
             avg_intolerance_se=('avg_intolerance', lambda x: x.std() / np.sqrt(len(x))),
@@ -246,15 +252,20 @@ class Statistics:
             avg_impoliteness_mean=('avg_impoliteness', 'mean'),
             avg_impoliteness_std=('avg_impoliteness', 'std'),
             avg_impoliteness_se=('avg_impoliteness', lambda x: x.std() / np.sqrt(len(x))),
-        )
-        print(t_int, p_int)
-          
+        ).to_dict()
+
+        means['t_int'] = f'{int_results.statistic} ({int_results.df}) = {int_results.pvalue}'
+        means['t_imp'] = f'{imp_results.statistic} ({imp_results.df}) = {imp_results.pvalue}'
+
+        self.jsonContent['Civility'].append(means)
+
+        return means
+
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:
             json.dump(self.jsonContent, f, indent=4)
 
 
-    # TO DO: specific test statistics
  
 
 class DataExtract:
@@ -279,10 +290,10 @@ class DataExtract:
             .merge(channels, on='author_id', how='left')
 
         if get_qs:
-            qs: pd.DataFrame = self.database.retrieve_data(tableName='questionnaires', colNames=['name', 'age'])
+            qs: pd.DataFrame = self.database.retrieve_data(tableName='questionnaires', colNames=['name', 'age', 'gender', 'education', 'political_preference'])
             users: pd.DataFrame = self.database.retrieve_data(tableName='users', colNames=['id AS user_id', 'name']).merge(qs, on='name', how='inner')
             timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(users, on='user_id', how='inner').drop(columns=['name']) 
-            timeSeriesDf = self.rollback_age(timeSeriesDf)
+            # timeSeriesDf = self.rollback_age(timeSeriesDf)
         
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
         if channelOrdering: 

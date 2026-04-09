@@ -73,15 +73,20 @@ class Validation:
             df[yTrueColumnName] = df[yTrueColumnName].apply(lambda x: x.strip())
             df[yPredColumnName] = df[yPredColumnName].apply(lambda x: x.strip())
 
-            class_report = classification_report(df[yTrueColumnName], df[yPredColumnName], target_names=self.posLabels, output_dict=True) 
+            if self.classificationType == 'civility':
+                kripp_data = np.array([df[yTrueColumnName].astype(float), df[yPredColumnName].astype(float)])
+                alpha = krippendorff.alpha(reliability_data=kripp_data, level_of_measurement='ordinal')
 
-            le = LabelEncoder()
-            le.fit(pd.concat([df[yTrueColumnName], df[yPredColumnName]]))
-            
-            kripp_data = np.array([le.transform(df[yTrueColumnName]), le.transform(df[yPredColumnName])])
-            alpha = krippendorff.alpha(reliability_data=kripp_data, level_of_measurement='nominal')
+                reports[i] = {'classification_report': [], 'krippendorff_alpha': alpha}
+            else:
+                class_report = classification_report(df[yTrueColumnName], df[yPredColumnName], target_names=self.posLabels, output_dict=True) 
 
-            reports[i] = {'classification_report': class_report, 'krippendorff_alpha': alpha}
+                le = LabelEncoder()
+                le.fit(pd.concat([df[yTrueColumnName], df[yPredColumnName]])) 
+                kripp_data = np.array([le.transform(df[yTrueColumnName]), le.transform(df[yPredColumnName])])
+                alpha = krippendorff.alpha(reliability_data=kripp_data, level_of_measurement='nominal')
+
+                reports[i] = {'classification_report': class_report, 'krippendorff_alpha': alpha}
 
         with open(f'classification_report_{self.classificationType}.json', 'w', encoding='utf-8') as f:
             json.dump(reports, f, indent=4)

@@ -36,7 +36,7 @@ def main():
 
     politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
     civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
-    km_plot: plt.Figure = graphs.create_km_graph(surivival_dfs)
+    km_plot: plt.Figure = graphs.create_km_graph(survival_dfs)
  
     graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 

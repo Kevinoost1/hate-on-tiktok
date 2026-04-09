@@ -343,7 +343,7 @@ class DataExtract:
             for n in range(len(ordering)):
                 mask = timeSeriesDf['unique_id'].isin(ordering[str(n)])
                 timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 0
-                print(timeSeries.head())
+                print(timeSeriesDf.head())
                 timeSeriesDfs.append(timeSeriesDf.copy())
 
         return timeSeriesDfs

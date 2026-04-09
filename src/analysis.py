@@ -311,8 +311,9 @@ class Statistics:
  
 
 class DataExtract:
-    def __init__(self, database: Database):
+    def __init__(self, database: Database, base_dir=BASE_DIR):
         self.database: Database = database
+        self.base_dir = base_dir
 
     def request_time_series(self, channelOrdering: bool=False, get_qs: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
@@ -374,7 +375,7 @@ class DataExtract:
         return df
 
     @staticmethod
-    def load_channels(channelDefinitionFileName: str='/home/kevin/Documents/phd/Project-Data-Donation/src/channel_def.json') -> (list[str, ...], list[str, ...], list[str, ...]):
+    def load_channels(channelDefinitionFileName: str=BASE_DIR / 'src' / 'channel_def.json') -> (list[str, ...], list[str, ...], list[str, ...]):
         with open(channelDefinitionFileName, 'r') as f:
             channels = json.load(f)
         

@@ -386,7 +386,7 @@ class DataExtract:
 
     def extract_duration(self):
         duration_df = self.database.retrieve_data(tableName='transcript_classification tc JOIN videos_raw v ON v.id=tc.video_id', 
-                                                  colNames=['v.id AS video_id', 'v.videos_raw']).apply(decode_json)
+                                                  colNames=['v.id AS video_id', 'v.video_data_zstd']).apply(decode_json)
         duration_df.to_csv('duration.csv')
         
     def decode_json(self, compressed_string):

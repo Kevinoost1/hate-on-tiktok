@@ -13,21 +13,56 @@ import zstandard as zstd
 from pathlib import Path
 
 
+"""
+*Contains all analysis and analysis preprocessing code*
+NOTE. this file contains some comments with the tag: RD; this is to indicate where a research decision is made in the code. They are either self-explanatory or explained in the paper
+
+The file is structured in three parts:
+- Fetch the appropriate dataframe from the database -> DataExtract()
+- Do some basic ordering and preprocessing on that dataframe, depending on the analysis -> PrepareData()
+- Fetch the Graphs -> Graphs()
+- Compute the test statistics and descriptives -> Statistics()
+  
+DataExtract()
+DataExtract will take as input a Database() Object. If you are just working with a DataFrame, you can skip this class. The code should still work if your DataFrame is similar.
+The class always extracts a complete timeseries dataframe with individual feeds. Even though this is quite memory intensive, from this one dataframe you are able to construct all individual analyses, no need for multiple different SQL queries. 
+
+    - The class also takes as arguments: get_qs, to indicate if you want to questionnaire data merged as well and channelOrdering, this is important for the multiverse analysis part but can be insanely memory intensive due to it constructing dataframes for x many definitions. 
+    - A .json file (channel_def.json) is used to store complete lists of official channels under different definitions. This file should be included on the GitHub if you need it. 
+    - The class has two seperate staticmethods to parse the video_duration from compressed strings. This is a very lengthy and computationally expensive process, thus it's set up to run and save seperately to later merge with the timeseries. You can run it all at once if you want (it just takes a while and needs some memory), just return the dataframe and merge it. 
+    - The DataExtract() class does not simply return one dataframe, but instead a list of dataframes to work with the multiverse analysis (even if you set channelOrdering to False). 
+        You can process each part of the list seperately as shown in main() and all functions still work if the length of the list is 1 (channelOrdering == False). 
+
+PrepareData()
+Not much needs to be said here. Methods within this class just take a DataFrame (timeseries) and prepare it for the downstream analyses and graphs.
+There are some research decisions in there, such as a watch time cutoff and the number of days for resampling the news over time analysis. 
+
+Graphs()
+Contains the code for any of the graphs used in the paper. 
+The class methods also take a (prepared) DataFrame and save all the graphs to a pdf so that it's easy to view and paste from. 
+
+Statistics()
+Methods in this class calculate statistics for any of the analyses based on the prepared dataframe.
+Each analysis has its own method with a seperate descriptives method for retrieving the sample descriptives.
+All results are saved to a .json so it's easy to copy from and view at later moments without rerunning analyses. 
+"""
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def main():
     db = Database('transcript_classification', db_path=BASE_DIR / 'database' / 'old_db.sqlite3')
-    anal = Analysis()
+    prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
 
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=True)
     
-    politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
-    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
-    survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
+    politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
+    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
+    survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
 
     desc = stats.get_descriptives(dfs)
     stats.get_civility(civility_dfs)
@@ -40,11 +75,10 @@ def main():
  
     graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
-    print("onto extract_duration")
     data.extract_duration()
 
 
-class Analysis:
+class PrepareData():
     def __init__(self):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
 
@@ -126,6 +160,12 @@ class Graphs():
             ax_classification.set_xlabel('Watch Time (sec)')
             ax_classification.set_ylabel('Proportion of Video\'s Still Watched')
 
+        ax[0].set_xlim(3, 250)
+        ax[0].set_title("Watch Time on TikTok Video's as Seperated by Topic")
+
+        ax[1].set_xlim(3, 250)
+        ax[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment")
+
         plt.tight_layout()
 
         return fig
@@ -155,19 +195,17 @@ class Graphs():
         axes[0].set_ylabel('Ratio News, Politics & Societal Issues Videos')
         axes[0].set_ylim(0, (df['mean_ratio'] + df['sem_ratio']).max())
         axes[0].set_title('Ratio News, Politics & Societal Issues Videos over Time')
-
-        
-        axes[2].plot(df.index, df['mean_intolerance'], marker='o', color=self.colors['purple'])
-        axes[2].fill_between(df.index, df['mean_intolerance'] - df['sem_intolerance'], df['mean_intolerance'] + df['sem_intolerance'], color=self.colors['purple'], alpha=0.3)
-        axes[2].set_ylabel('Mean Intolerance Rating')
-        axes[2].set_ylim(0, 1)
-
-        
+                
         axes[1].plot(df.index, df['mean_watch_time'], marker='o', color=self.colors['brown'])
         axes[1].fill_between(df.index, df['mean_watch_time'] - df['sem_watch_time'], df['mean_watch_time'] + df['sem_watch_time'], color=self.colors['brown'], alpha=0.3)
         axes[1].set_xlabel('Starting Date')
         axes[1].set_ylim(0, (df['mean_watch_time'] + df['sem_watch_time']).max())
         axes[1].set_ylabel('Mean Watch Time (sec) on News, Politics & Societal Issues Videos')
+
+        axes[2].plot(df.index, df['mean_intolerance'], marker='o', color=self.colors['purple'])
+        axes[2].fill_between(df.index, df['mean_intolerance'] - df['sem_intolerance'], df['mean_intolerance'] + df['sem_intolerance'], color=self.colors['purple'], alpha=0.3)
+        axes[2].set_ylabel('Mean Intolerance Rating')
+        axes[2].set_ylim(0, (df['mean_intolerance'] + df['sem_intolerance']).max())
 
         plt.xticks(rotation=45)
         plt.tight_layout()
@@ -179,26 +217,27 @@ class Graphs():
         fig, axes = plt.subplots(2, 1, figsize=(8,6), sharex=True)
 
         for df in results:
-            sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
-            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[1])
+            sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, line_width=0.5, markers="o", color=self.colors['orange'], ax=axes[0])
+            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, line_width=0.5, markers="o", color=self.colors['orange'], ax=axes[1])
         
         combined = pd.concat(results, ignore_index=True)
         avg_over_definitions = combined.groupby(['user_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))
 
         sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
-        sns.stripplot(data=avg_over_definitions, x="official", y="avg_impoliteness", jitter=0.2, alpha=0.3, ax=axes[0], size=3, color=self.colors['dark_blue'])
+        sns.stripplot(data=avg_over_definitions, x="official", y="avg_impoliteness", jitter=0.2, alpha=0.2, ax=axes[0], size=3, color=self.colors['dark_blue'])
 
         sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
-        sns.stripplot(data=avg_over_definitions, x="official", y="avg_intolerance", jitter=0.2, alpha=0.3, ax=axes[1], size=3, color=self.colors['dark_blue'])
+        sns.stripplot(data=avg_over_definitions, x="official", y="avg_intolerance", jitter=0.2, alpha=0.2, ax=axes[1], size=3, color=self.colors['dark_blue'])
 
 
         axes[0].set_ylabel("Average Impoliteness")
-        axes[0].set_title("Civility Across Channel Types")
+        axes[0].set_title("Average Civility per Channel Type")
+        axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
 
         axes[1].set_ylabel("Average Intolerance")
         axes[1].set_xticklabels(["Unofficial","Official"])
-
-        plt.tight_layout() 
+        axes[1].set_xlabel("")
+        axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
 
         return fig
 
@@ -346,7 +385,7 @@ class DataExtract:
             for n in range(len(ordering)):
                 mask = timeSeriesDf['unique_id'].isin(ordering[str(n)])
                 timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 0
-                print(timeSeriesDf.head())
+                
                 timeSeriesDfs.append(timeSeriesDf.copy())
 
         return timeSeriesDfs
@@ -386,10 +425,11 @@ class DataExtract:
 
     def extract_duration(self):
         duration_df = self.database.retrieve_data(tableName='transcript_classification tc JOIN videos_raw v ON v.id=tc.video_id', 
-                                                  colNames=['v.id AS video_id', 'v.video_data_zstd']).apply(decode_json)
+                                                  colNames=['v.id AS video_id', 'v.video_data_zstd']).apply(self.decode_json)
         duration_df.to_csv('duration.csv')
-        
-    def decode_json(self, compressed_string):
+    
+    @staticmethod
+    def decode_json(compressed_string):
         dctx = zstd.ZstdDecompressor()
         decompressed = dctx.decompress(compressed_string)
         raw_json = json.loads(decompressed.decode("utf-8")) 

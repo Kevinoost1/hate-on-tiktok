@@ -10,10 +10,14 @@ import seaborn as sns
 import scipy.stats as stats
 from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def main():
-    db = Database('transcript_classification', db_path='/projects/pi-mai/Project-Data-Donation/database/old_db.sqlite3')
+    db = Database('transcript_classification', db_path=BASE_DIR / 'database' / 'old_db.sqlite3')
     anal = Analysis()
     data = DataExtract(db)
     graphs = Graphs()
@@ -43,6 +47,7 @@ class Analysis:
 
 
     def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=8) -> pd.DataFrame:
+        print('it reached construct politics')
         df: pd.DataFrame = timeSeriesDf.copy()
         df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True) 
         df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
@@ -55,7 +60,6 @@ class Analysis:
         for user, user_df in df.groupby('user_id'):
             resampled: pd.DataFrame = user_df.resample('5D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'), 
                                                                  n_high_intolerance=('high_intolerance', 'sum'))
-
             resampled['ratio_news'] = resampled['n_politics_videos'] / resampled['n_videos']
             resampled['avg_watchtime_politics'] = resampled['watchtime_politics'] / resampled['n_politics_videos']
             resampled['ratio_high_intolerance'] = resampled['n_high_intolerance'] / resampled['n_politics_videos']
@@ -77,6 +81,7 @@ class Analysis:
 
 
     def construct_civility(self, timeSeriesDf: pd.DataFrame, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
+        print('it reached civility')
         df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'official', topicColumnName, intoleranceColumnName, impolitenessColumnName]]
         df: pd.DataFrame = df[df[topicColumnName] == 'Politics & Social Issues']
  
@@ -122,7 +127,6 @@ class Graphs():
 
         return fig
 
-                
     # TO DO: make the graph nicer
     def create_timeseries_graph(self, dfs: list[pd.DataFrame]): 
         df = dfs[0]
@@ -219,8 +223,7 @@ class Statistics:
             n_videos=('video_id', 'count'),
             n_unique_videos=('video_id', 'nunique'),
             n_videos_w_transcript=('videos_with_transcript', 'sum'),
-            n_unique_videos_w_transcript=('video_id', 
-                lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
+            n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
             n_politics=('news_politics', 'sum'),
             Positive=('Positive', 'sum'), 
             Negative=('Negative', 'sum'), 
@@ -234,9 +237,7 @@ class Statistics:
         for sent in ['Positive', 'Negative', 'Neutral']:
             per_user_num[f'ratio_{sent}'] = per_user_num[sent] / per_user_num['n_videos']
 
-        per_user_cat: pd.DataFrame = df.groupby('user_id').agg(
-           gender=('gender', 'first'), education=('education', 'first')
-        )
+        per_user_cat: pd.DataFrame = df.groupby('user_id').agg(gender=('gender', 'first'), education=('education', 'first'))
  
         descriptives_num = per_user_num.agg(['mean', 'std', 'median', 'max', 'min', 'count', 'sum']).to_dict()
         descriptives_cat = {col: per_user_cat[col].value_counts().to_dict() for col in per_user_cat.columns}
@@ -303,7 +304,6 @@ class Statistics:
 
         return summary
         
-
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:
             json.dump(self.jsonContent, f, indent=4)
@@ -335,13 +335,14 @@ class DataExtract:
             qs: pd.DataFrame = self.database.retrieve_data(tableName='questionnaires', colNames=['name', 'age', 'gender', 'education', 'political_preference'])
             users: pd.DataFrame = self.database.retrieve_data(tableName='users', colNames=['id AS user_id', 'name']).merge(qs, on='name', how='inner')
             timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(users, on='user_id', how='inner').drop(columns=['name']) 
-            # timeSeriesDf = self.rollback_age(timeSeriesDf)
+            timeSeriesDf = self.rollback_age(timeSeriesDf)
         
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
         if channelOrdering: 
             for n in range(len(ordering)):
                 mask = timeSeriesDf['unique_id'].isin(ordering[str(n)])
                 timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 0
+                print(timeSeries.head())
                 timeSeriesDfs.append(timeSeriesDf.copy())
 
         return timeSeriesDfs
@@ -379,11 +380,6 @@ class DataExtract:
         
         return channels['official'], channels['unofficial'], channels['ordering']
 
-
-
-
-
-        
 
 
 

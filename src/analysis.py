@@ -13,7 +13,7 @@ import zstandard as zstd
 
 
 def main():
-    db = Database('transcript_classification', db_path='/home/kevin/Documents/phd/Project-Data-Donation/database/old_db.sqlite3')
+    db = Database('transcript_classification', db_path='/projects/pi-mai/Project-Data-Donation/database/old_db.sqlite3')
     anal = Analysis()
     data = DataExtract(db)
     graphs = Graphs()

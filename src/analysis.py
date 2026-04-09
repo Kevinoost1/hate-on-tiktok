@@ -19,21 +19,22 @@ def main():
     graphs = Graphs()
     stats = Statistics()
 
-    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True)
+    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=True)
     
-    # politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
-    # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
+    politics_t_dfs: list[pd.DataFrame] = [anal.construct_politics_t(df) for df in dfs]
+    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_civility(df) for df in dfs]
     survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [anal.construct_survival(df) for df in dfs]   
-    # desc = stats.get_descriptives(dfs)
-    # stats.get_civility(civility_dfs)
+
+    desc = stats.get_descriptives(dfs)
+    stats.get_civility(civility_dfs)
     stats.get_survival(survival_dfs)
     stats.dump_to_json()
 
-    # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
-    # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
-    # km_plot: plt.Figure = graphs.create_km_graph(surivival_dfs)
+    politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
+    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    km_plot: plt.Figure = graphs.create_km_graph(surivival_dfs)
  
-    # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
+    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
 
 class Analysis:
@@ -167,17 +168,25 @@ class Graphs():
         return fig       
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]):
-        results = dfs[0]
+        results = dfs
         fig, axes = plt.subplots(2, 1, figsize=(8,6), sharex=True)
 
-        sns.stripplot(data=results, x="official", y="avg_impoliteness", jitter=0.2, alpha=0.3, ax=axes[0], size=3, color=self.colors['orange'])
-        sns.pointplot(data=results, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
+        for df in results:
+            sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
+            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[1])
+        
+        combined = pd.concat(results, ignore_index=True)
+        avg_over_definitions = combined.groupby(['user_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))
+
+        sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
+        sns.stripplot(data=avg_over_definitions, x="official", y="avg_impoliteness", jitter=0.2, alpha=0.3, ax=axes[0], size=3, color=self.colors['dark_blue'])
+
+        sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
+        sns.stripplot(data=avg_over_definitions, x="official", y="avg_intolerance", jitter=0.2, alpha=0.3, ax=axes[1], size=3, color=self.colors['dark_blue'])
+
 
         axes[0].set_ylabel("Average Impoliteness")
         axes[0].set_title("Civility Across Channel Types")
-
-        sns.stripplot(data=results, x="official", y="avg_intolerance", jitter=0.2, alpha=0.3, ax=axes[1], size=3, color=self.colors['orange'])
-        sns.pointplot(data=results, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
 
         axes[1].set_ylabel("Average Intolerance")
         axes[1].set_xticklabels(["Unofficial","Official"])
@@ -239,32 +248,44 @@ class Statistics:
         return descriptives
 
     def get_civility(self, civilityDfs) -> dict[str, float]:
-        df: pd.DataFrame = civilityDfs[0].copy()
-        paired: pd.DataFrame = df.pivot(index='user_id', columns='official', values=['avg_intolerance', 'avg_impoliteness'])
+        dfs: pd.DataFrame = civilityDfs
 
-        # RD: Some people had NaN (likely to little videos from 'official')       # TO DO: remember what was up with these people
-        df = df.dropna()
-        paired = paired.dropna()
+        p_values = {'intolerance': [], 'impoliteness': []}
+        t_values = {'intolerance': [], 'impoliteness': []}
+        d_values = {'intolerance': [], 'impoliteness': []}
 
-        int_results = stats.ttest_rel(paired['avg_intolerance'][1], paired['avg_intolerance'][0], alternative='less') 
-        imp_results = stats.ttest_rel(paired['avg_impoliteness'][1], paired['avg_impoliteness'][0], alternative='less')
+        results = {'p_values': p_values, 't_values': t_values, 'd_values': d_values, 'd_mean': {}, 'd_sd': {}, 'd_range': {}, 'p_range': {}}
 
-        means = df.groupby('official').agg(
-            avg_intolerance_mean=('avg_intolerance', 'mean'),
-            avg_intolerance_std=('avg_intolerance', 'std'),
-            avg_intolerance_se=('avg_intolerance', lambda x: x.std() / np.sqrt(len(x))),
-            
-            avg_impoliteness_mean=('avg_impoliteness', 'mean'),
-            avg_impoliteness_std=('avg_impoliteness', 'std'),
-            avg_impoliteness_se=('avg_impoliteness', lambda x: x.std() / np.sqrt(len(x))),
-        ).to_dict()
+        for df in dfs:
+            paired: pd.DataFrame = df.pivot(index='user_id', columns='official', values=['avg_intolerance', 'avg_impoliteness'])
 
-        means['t_int'] = f'{int_results.statistic} ({int_results.df}) = {int_results.pvalue}'
-        means['t_imp'] = f'{imp_results.statistic} ({imp_results.df}) = {imp_results.pvalue}'
+            # RD: Some people had NaN (likely to little videos from 'official')       # TO DO: remember what was up with these people
+            paired = paired.dropna()
 
-        self.jsonContent['Civility'].append(means)
+            int_results = stats.ttest_rel(paired['avg_intolerance'][1], paired['avg_intolerance'][0], alternative='less') 
+            imp_results = stats.ttest_rel(paired['avg_impoliteness'][1], paired['avg_impoliteness'][0], alternative='less')
 
-        return means
+            p_values['intolerance'].append(int_results.pvalue)
+            p_values['impoliteness'].append(imp_results.pvalue)
+
+            d_values['intolerance'].append(int_results.statistic / np.sqrt(len(paired['avg_intolerance'][1])))
+            d_values['impoliteness'].append(imp_results.statistic / np.sqrt(len(paired['avg_impoliteness'][1])))
+
+            t_values['intolerance'].append(int_results.statistic)
+            t_values['impoliteness'].append(imp_results.statistic)
+
+        for analysis_type in ['intolerance', 'impoliteness']:
+            d_array = np.array(d_values[analysis_type])
+            p_array = np.array(p_values[analysis_type])
+
+            results['d_mean'][analysis_type] = np.mean(d_array)
+            results['d_sd'][analysis_type] = np.std(d_array)
+            results['d_range'][analysis_type] = (np.min(d_array), np.max(d_array))
+            results['p_range'][analysis_type] = (np.min(p_array), np.max(p_array))
+
+        self.jsonContent['Civility'].append(results)
+
+        return results
 
     def get_survival(self, survival_dfs: pd.DataFrame):
         df = survival_dfs[0][['ll3_topic_single_pred', 'll3_sent_cat_pred', 'event', 'watch_time_s']].copy()
@@ -286,7 +307,6 @@ class Statistics:
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:
             json.dump(self.jsonContent, f, indent=4)
-
 
  
 
@@ -320,7 +340,8 @@ class DataExtract:
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
         if channelOrdering: 
             for n in range(len(ordering)):
-                timeSeriesDf.loc[timeSeriesDf['unique_id'] in ordering[n], 'official'] = 0
+                mask = timeSeriesDf['unique_id'].isin(ordering[str(n)])
+                timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 0
                 timeSeriesDfs.append(timeSeriesDf.copy())
 
         return timeSeriesDfs
@@ -336,7 +357,7 @@ class DataExtract:
         df['new_session'] = (df['watch_time_s'] >= 300).astype(int)
         df.loc[df.groupby('user_id').tail(1).index, 'new_session'] = 2
         
-        # RD: for now, drop the 'new_session != 0' rows. At those points the watch_time_s is not accurate (artificially large)
+        # RD: drop the 'new_session != 0' rows. At those points the watch_time_s is not accurate (artificially large)
         return df[df['new_session'] == 0]
 
     # TO DO: implement retrieve_video_durations()
@@ -352,7 +373,7 @@ class DataExtract:
         return df
 
     @staticmethod
-    def load_channels(channelDefinitionFileName: str='/home/kevin/Documents/phd/Project-Data-Donation/src/channel_def.json') -> (list[str, ...], list[str, ...]):
+    def load_channels(channelDefinitionFileName: str='/home/kevin/Documents/phd/Project-Data-Donation/src/channel_def.json') -> (list[str, ...], list[str, ...], list[str, ...]):
         with open(channelDefinitionFileName, 'r') as f:
             channels = json.load(f)
         

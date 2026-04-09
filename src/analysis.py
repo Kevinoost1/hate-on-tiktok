@@ -217,8 +217,8 @@ class Graphs():
         fig, axes = plt.subplots(2, 1, figsize=(8,6), sharex=True)
 
         for df in results:
-            sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, line_width=0.5, markers="o", color=self.colors['orange'], ax=axes[0])
-            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, line_width=0.5, markers="o", color=self.colors['orange'], ax=axes[1])
+            sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
+            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[1])
         
         combined = pd.concat(results, ignore_index=True)
         avg_over_definitions = combined.groupby(['user_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from database import *
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import json
@@ -39,6 +39,9 @@ def main():
     km_plot: plt.Figure = graphs.create_km_graph(surivival_dfs)
  
     graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
+
+    print("onto extract_duration")
+    data.extract_duration()
 
 
 class Analysis:
@@ -381,6 +384,25 @@ class DataExtract:
         
         return channels['official'], channels['unofficial'], channels['ordering']
 
+    def extract_duration(self):
+        duration_df = self.database.retrieve_data(tableName='transcript_classification tc JOIN videos_raw v ON v.id=tc.video_id', 
+                                                  colNames=['v.id AS video_id', 'v.videos_raw']).apply(decode_json)
+        duration_df.to_csv('duration.csv')
+        
+    def decode_json(self, compressed_string):
+        dctx = zstd.ZstdDecompressor()
+        decompressed = dctx.decompress(compressed_string)
+        raw_json = json.loads(decompressed.decode("utf-8")) 
+        try:
+            if "video" in raw_json and "duration" in raw_json["video"]:
+                duration = raw_json["video"]["duration"]
+            else:
+                duration = None
+
+        except Exception:
+            duration = None
+
+        return duration
 
 
 

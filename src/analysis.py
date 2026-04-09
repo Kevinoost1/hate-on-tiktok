@@ -76,11 +76,11 @@ class Analysis:
         return df
 
 
-    def construct_civility(self, timeSeriesDf: pd.Dataframe, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
+    def construct_civility(self, timeSeriesDf: pd.DataFrame, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'official', topicColumnName, intoleranceColumnName, impolitenessColumnName]]
         df: pd.DataFrame = df[df[topicColumnName] == 'Politics & Social Issues']
  
-        results: pd.Dataframe = (df.groupby(['user_id', 'official'], as_index=False).agg(
+        results: pd.DataFrame = (df.groupby(['user_id', 'official'], as_index=False).agg(
             avg_impoliteness=(impolitenessColumnName, 'mean'),
             avg_intolerance=(intoleranceColumnName, 'mean')
         ))

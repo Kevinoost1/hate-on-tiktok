@@ -37,7 +37,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv') ->
 
 
 if __name__=='__main__':
-    db = Database('transcript_classification')
+    # db = Database('transcript_classification')
     id_df = get_results()
     db.update_data('transcript_classification', id_df)
     

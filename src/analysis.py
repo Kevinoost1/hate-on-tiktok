@@ -160,11 +160,11 @@ class Graphs():
             ax_classification.set_xlabel('Watch Time (sec)')
             ax_classification.set_ylabel('Proportion of Video\'s Still Watched')
 
-        ax[0].set_xlim(3, 250)
-        ax[0].set_title("Watch Time on TikTok Video's as Seperated by Topic")
+        axes[0].set_xlim(3, 250)
+        axes[0].set_title("Watch Time on TikTok Video's as Seperated by Topic")
 
-        ax[1].set_xlim(3, 250)
-        ax[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment")
+        axes[1].set_xlim(3, 250)
+        axes[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment")
 
         plt.tight_layout()
 

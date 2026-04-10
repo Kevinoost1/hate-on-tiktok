@@ -28,24 +28,11 @@ def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColum
     id_df.to_csv('id.csv', index=False)
     return id_df
 
-def fake():
-    preds = []
-    probs = []
-
-    with open('transcripts.txt', 'r', encoding='utf-8') as f:
-        for i, line in enumerate(f):
-            preds.append(f"ROW_{i}")
-            probs.append(i)
-
-    return pd.DataFrame({
-    'pred': preds,
-    'probs': probs
-    })      
 
 def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv', 
                 predColumnName: str='pred', probColumName: str='probs') -> pd.DataFrame:
-    # results_df: pd.DataFrame = pd.read_csv(results_csvName)
-    results_df = fake()
+
+    results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
 
     assert len(results_df) == len(id_df)

@@ -58,22 +58,22 @@ def main():
     graphs = Graphs()
     stats = Statistics()
 
-    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=True)
+    # dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=True)
     
-    politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
-    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
-    survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
+    # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
+    # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
+    # survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
 
-    desc = stats.get_descriptives(dfs)
-    stats.get_civility(civility_dfs)
-    stats.get_survival(survival_dfs)
-    stats.dump_to_json()
+    # desc = stats.get_descriptives(dfs)
+    # stats.get_civility(civility_dfs)
+    # stats.get_survival(survival_dfs)
+    # stats.dump_to_json()
 
-    politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
-    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
-    km_plot: plt.Figure = graphs.create_km_graph(survival_dfs)
+    # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
+    # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    # km_plot: plt.Figure = graphs.create_km_graph(survival_dfs)
  
-    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
+    # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
     data.extract_duration()
 

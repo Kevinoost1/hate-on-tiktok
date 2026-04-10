@@ -1,7 +1,7 @@
 import pandas as pd
 import sqlite3
 from database import *
-
+import json
 
 '''
 In main.py you can find an example use for the entire analysis pipeline
@@ -21,15 +21,37 @@ In main.py you can find an example use for the entire analysis pipeline
 
 def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColumn, mergeTargetName:str='video_id') -> pd.DataFrame:
     with open('transcripts.txt', 'w', encoding='utf-8') as f:
-        f.writelines(f"{transcript}, {desc}\n" for transcript, desc in zip(df[transcriptColumn], df[descriptionColumn]))        
+        for t, d in zip(df[transcriptColumn], df[descriptionColumn]):
+            f.write(json.dumps({"transcript": t, "desc": d}) + "\n")
+
     id_df: pd.DataFrame = df[[mergeTargetName]]
     id_df.to_csv('id.csv', index=False)
     return id_df
 
+def fake():
+    preds = []
+    probs = []
+
+    with open('transcripts.txt', 'r', encoding='utf-8') as f:
+        for i, line in enumerate(f):
+            preds.append(f"ROW_{i}")
+            probs.append(i)
+
+    return pd.DataFrame({
+    'pred': preds,
+    'probs': probs
+    })      
+
 def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv', 
                 predColumnName: str='pred', probColumName: str='probs') -> pd.DataFrame:
-    results_df: pd.DataFrame = pd.read_csv(results_csvName)
+    # results_df: pd.DataFrame = pd.read_csv(results_csvName)
+    results_df = fake()
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
+
+    assert len(results_df) == len(id_df)
+
+    print(len(id_df))
+    print(len(results_df))
 
     id_df[predColumnName] = results_df['pred']
     id_df[probColumName] = results_df['probs']

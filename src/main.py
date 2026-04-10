@@ -12,7 +12,7 @@ def main():
                                 colNames=['tc.id', 'tc.video_id', 'tc.translation', 'v.desc'], 
                                 restrictions='(topic IS NULL) AND (filtered = 0)', batch_size=10000)
 
-    id_df = transcripts_to_txt(df, 'translation', 'desc')  
+    id_df = transcripts_to_txt(df, 'translation', 'desc', mergeTargetName='id')  
 
 if __name__ == '__main__':
     main()

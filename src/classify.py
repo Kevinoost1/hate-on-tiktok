@@ -19,26 +19,27 @@ In main.py you can find an example use for the entire analysis pipeline
 '''
 
 
-def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColumn) -> pd.DataFrame:
+def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColumn, mergeTargetName:str='video_id') -> pd.DataFrame:
     with open('transcripts.txt', 'w', encoding='utf-8') as f:
         f.writelines(f"{transcript}, {desc}\n" for transcript, desc in zip(df[transcriptColumn], df[descriptionColumn]))        
-    id_df: pd.DataFrame = df[['id']]
+    id_df: pd.DataFrame = df[[mergeTargetName]]
     id_df.to_csv('id.csv', index=False)
     return id_df
 
-def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv') -> pd.DataFrame:
+def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv', 
+                predColumnName: str='pred', probColumName: str='probs') -> pd.DataFrame:
     results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
 
-    id_df['topic'] = results_df['pred']
-    id_df['topic_prob'] = results_df['probs']
+    id_df[predColumnName] = results_df['pred']
+    id_df[probColumName] = results_df['probs']
 
     return id_df
 
 
 if __name__=='__main__':
-    # db = Database('transcript_classification')
+    db = Database('transcript_classification')
     id_df = get_results()
-    db.update_data('transcript_classification', id_df)
+    db.update_data('transcript_classification', id_df, predColumnName='topic', probColumName='topic_prob')
     
 

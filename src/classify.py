@@ -2,6 +2,7 @@ import pandas as pd
 import sqlite3
 from database import *
 import json
+import random
 
 '''
 In main.py you can find an example use for the entire analysis pipeline
@@ -49,6 +50,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
 if __name__=='__main__':
     db = Database('transcript_classification')
     id_df = get_results()
+    id_df.to_csv(f'id_df_{random.randint(0, 100)}')
     db.update_data('transcript_classification', id_df, predColumnName='topic', probColumName='topic_prob')
     
 

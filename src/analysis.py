@@ -11,6 +11,8 @@ import scipy.stats as stats
 from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 from pathlib import Path
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 
 
 """
@@ -58,18 +60,22 @@ def main():
     graphs = Graphs()
     stats = Statistics()
 
-    # dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=True)
+    # dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
     
     # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
+    # politics_t_plot_dfs = [df[0] for df in politics_t_dfs]
+    # politics_t_model_dfs = [df[1] for df in politics_t_dfs]
+
     # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
     # survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
 
     # desc = stats.get_descriptives(dfs)
     # stats.get_civility(civility_dfs)
     # stats.get_survival(survival_dfs)
+    # stats.get_timeseries(politics_t_model_dfs)
     # stats.dump_to_json()
 
-    # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_dfs) 
+    # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_plot_dfs) 
     # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
     # km_plot: plt.Figure = graphs.create_km_graph(survival_dfs)
  
@@ -81,10 +87,17 @@ def main():
 class PrepareData():
     def __init__(self):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
+        self.political_events = {
+            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
+            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
+            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
+            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
+            # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+        }
 
 
     def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=8) -> pd.DataFrame:
-        print('it reached construct politics')
         df: pd.DataFrame = timeSeriesDf.copy()
         df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True) 
         df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
@@ -93,18 +106,26 @@ class PrepareData():
         df: pd.DataFrame = df.set_index(dateColumnName)
         df['high_intolerance'] = (df['intolerance'] > 5).astype(int)
 
+        df = df.assign(event=0)
+        event_window: int = 3
+        for event_date in self.political_events.values():
+            df.loc[(df.index >= event_date - pd.Timedelta(days=event_window)) & (df.index <= event_date), 'event'] = 1
+
         user_dfs = []
         for user, user_df in df.groupby('user_id'):
             resampled: pd.DataFrame = user_df.resample('5D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'), 
-                                                                 n_high_intolerance=('high_intolerance', 'sum'))
+                                                                 n_high_intolerance=('high_intolerance', 'sum'), event=('event', 'max'))
             resampled['ratio_news'] = resampled['n_politics_videos'] / resampled['n_videos']
             resampled['avg_watchtime_politics'] = resampled['watchtime_politics'] / resampled['n_politics_videos']
             resampled['ratio_high_intolerance'] = resampled['n_high_intolerance'] / resampled['n_politics_videos']
+            resampled['user_id'] = user
             user_dfs.append(resampled)
 
         df: pd.DataFrame = pd.concat(user_dfs)
         # RD: only keep the rows where there is 'enough' data
         df: pd.DataFrame = df[df['n_politics_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
+
+        timeseries: pd.DataFrame = df.copy()
 
         df:pd.DataFrame = df.groupby(df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
                                                    mean_watch_time=('avg_watchtime_politics', 'mean'), sem_watch_time=('avg_watchtime_politics', lambda x: x.std()/np.sqrt(len(x))),
@@ -114,7 +135,7 @@ class PrepareData():
         df['mean_watch_time'] = df['mean_watch_time'].rolling(window=5, min_periods=1, center=True).mean()
         df['mean_intolerance'] = df['mean_intolerance'].rolling(window=5, min_periods=1, center=True).mean()
 
-        return df
+        return df, timeseries
 
 
     def construct_civility(self, timeSeriesDf: pd.DataFrame, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
@@ -140,7 +161,14 @@ class PrepareData():
 class Graphs():
     def __init__(self):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
-
+        self.political_events = {
+            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
+            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
+            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
+            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
+            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+        }
 
     # TO DO: make the graph nicer    
     def create_km_graph(self, dfs: list[pd.DataFrame], topicColumnName: str='ll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred') -> plt.Figure():
@@ -174,18 +202,9 @@ class Graphs():
     def create_timeseries_graph(self, dfs: list[pd.DataFrame]): 
         df = dfs[0]
 
-        political_dates: dict[str, pd.Datetime] = {
-            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
-            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
-            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
-            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
-            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
-        }
-
         fig, axes = plt.subplots(3, 1, figsize=(12, 6), sharex=True)
 
-        for label, date in political_dates.items():
+        for label, date in self.political_events.items():
             for ax in axes:
                 ax.axvline(date, linestyle='--', label=label, color=self.colors['green'])
         axes[0].legend()
@@ -345,6 +364,19 @@ class Statistics:
         self.jsonContent['Watchtime'].append(summary)
 
         return summary
+
+    def get_timeseries(self, politics_t_model_dfs):
+        df = politics_t_model_dfs[0]
+        print(df.head())
+        model = smf.glm(
+            formula="n_politics_videos / n_videos ~ event",
+            data=df,
+            family=sm.families.Binomial(),
+            weights=df["n_videos"]
+        ).fit(cov_type='cluster', cov_kwds={'groups': df['user_id']})
+
+        print(model.summary())
+
         
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:

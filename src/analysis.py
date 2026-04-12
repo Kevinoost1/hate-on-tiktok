@@ -11,8 +11,8 @@ import scipy.stats as stats
 from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 from pathlib import Path
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
+# import statsmodels.api as sm
+# import statsmodels.formula.api as smf
 
 
 """

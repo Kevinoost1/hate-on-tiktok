@@ -71,9 +71,9 @@ class Database:
             cursor.execute(f'PRAGMA table_info({tableName})') 
             existingCols = [row[1] for row in cursor.fetchall()]
 
-        for col, type in zip(requiredCols.keys(), requiredCols.values()):
-            if col not in existingCols:
-                cursor.execute(f"ALTER TABLE {tableName} ADD {col} {type};")
+            for col, type in zip(requiredCols.keys(), requiredCols.values()):
+                if col not in existingCols:
+                    cursor.execute(f"ALTER TABLE {tableName} ADD {col} {type};")
 
     def insert_data(self, tableName: str, data: pd.DataFrame) -> None:
         colNames: str = ', '.join(data.columns)
@@ -99,13 +99,15 @@ class Database:
             """
             conn.executemany(query, values)
 
-    def retrieve_data(self, tableName: str, colNames: list, restrictions: str=None, batch_size: int=None) -> pd.DataFrame:
+    def retrieve_data(self, tableName: str, colNames: list, restrictions: str=None, orderby: str=None, batch_size: int=None, offset: int=None) -> pd.DataFrame:
         colNames: str = ', '.join(colNames)
 
         with self.connect() as conn:
             query: str = f'SELECT {colNames} FROM {tableName}'
             query += f' WHERE {restrictions}' if restrictions else ''
+            query += f' ORDER BY {orderby}' if orderby else ''
             query += f' LIMIT {batch_size}' if batch_size else ''
+            query += f' OFFSET {offset}' if batch_size else ''
 
             return pd.read_sql(query, conn)
 

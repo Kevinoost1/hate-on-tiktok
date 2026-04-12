@@ -31,7 +31,7 @@ def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColum
 
 
 def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv', 
-                predColumnName: str='pred', probColumName: str='probs') -> pd.DataFrame:
+                predColumnName: str='pred', probColumName: str='probs', resultsColumnName: str='pred') -> pd.DataFrame:
 
     results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
@@ -41,7 +41,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
     print(len(id_df))
     print(len(results_df))
 
-    id_df[predColumnName] = results_df['pred']
+    id_df[predColumnName] = results_df[resultsColumnName]
     id_df[probColumName] = results_df['probs']
 
     return id_df

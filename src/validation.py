@@ -70,10 +70,10 @@ class Validation:
     def get_classification_report(self, yTrueColumnName: str=f'manual_topic', yPredColumnName: str='pred') -> dict[int, dict]: 
         reports: dict = {}
         for i, df in enumerate(self.validationDfs):
-            df[yTrueColumnName] = df[yTrueColumnName].apply(lambda x: x.strip())
-            df[yPredColumnName] = df[yPredColumnName].apply(lambda x: x.strip())
+            df[yTrueColumnName] = df[yTrueColumnName].apply(lambda x: str(x).strip())
+            df[yPredColumnName] = df[yPredColumnName].apply(lambda x: str(x).strip())
 
-            if self.classificationType == 'civility':
+            if self.classificationType in ['impoliteness', 'intolerance']:
                 kripp_data = np.array([df[yTrueColumnName].astype(float), df[yPredColumnName].astype(float)])
                 alpha = krippendorff.alpha(reliability_data=kripp_data, level_of_measurement='ordinal')
 
@@ -97,7 +97,7 @@ def perform_validation(variant_names: list[str, ...], classificationType='topic'
                        posLabels=['News, Politics & Societal Issues', 'Other']):
 
     ground_truth: pd.DataFrame = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{ground_truth_name}")
-    merged_dfs: list[pd.DataFrame, ...] | list[] = []
+    merged_dfs = []
 
     for i, v in enumerate(variant_names):
         df = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{v}")
@@ -108,7 +108,9 @@ def perform_validation(variant_names: list[str, ...], classificationType='topic'
             merged_dfs.append(ground_truth.merge(df, on='video_id', how='left')) 
 
     val = Validation(merged_dfs, classificationType=classificationType, posLabels=posLabels)
-    val.plot_roc(manual_label_name)
+    if classificationType not in ['impoliteness', 'intolerance']:
+        val.plot_roc(manual_label_name)
+        
     val.get_classification_report(yTrueColumnName=manual_label_name, yPredColumnName='pred')
 
 if __name__ == '__main__':
@@ -120,10 +122,10 @@ if __name__ == '__main__':
                          'val_variant6.csv', 'val_variant7.csv', 'val_variant8.csv', 'val_variant9.csv',
                          'val_variant10.csv', 'val_variant11.csv'])
 
-    perform_validation(variant_names=['test_variant0.csv', 'test_variant1.csv'], classificationType='topic_test', ground_truth_name='test.csv')
-
     perform_validation(variant_names=['val_sub_variant0.csv', 'val_sub_variant1.csv'], classificationType='subtopic', ground_truth_name='sub.csv', 
                        manual_label_name='manual_subtopic', posLabels=['Political Systems', 'Discrimination', 'Migration',
                                                                        'Climate', 'Economy & International Relations', 'War & Conflict', 
                                                                        'Crime', 'Health', 'Digital Media & AI', 'Education', 'Social Policy & Employment', 'Other'])
+
+    perform_validation(variant_names=['val_int_variant0.csv'], classificationType='intolerance', ground_truth_name='val_int.csv', manual_label_name='manual_intolerance')
 

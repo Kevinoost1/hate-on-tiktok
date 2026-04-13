@@ -465,7 +465,7 @@ class DataExtract:
                 break
             
             duration_df['video_duration'] = duration_df['video_duration'].apply(self.decode_json)
-            db.update_data('transcript_classification', duration_df, idColumnName='video_id')
+            self.database.update_data('transcript_classification', duration_df, idColumnName='video_id')
             offset += batch_size
 
     

@@ -456,10 +456,18 @@ class DataExtract:
         return channels['official'], channels['unofficial'], channels['ordering']
 
     def extract_duration(self):
-        duration_df = self.database.retrieve_data(tableName='transcript_classification tc JOIN videos_raw v ON v.id=tc.video_id', 
-                                                  colNames=['v.id AS video_id', 'v.video_data_zstd'])
-        duration_df['video_data_zstd'] = duration_df['video_data_zstd'].apply(self.decode_json)
-        duration_df.to_csv('duration.csv')
+        offset = 0
+        batch_size = 10000
+        while True:
+            duration_df = self.database.retrieve_data(tableName='transcript_classification tc INNER JOIN videos_raw v ON v.id=tc.video_id', 
+                                                    colNames=['v.id AS video_id', 'v.video_data_zstd AS video_duration'], offset=offset, batch_size=batch_size)
+            if duration_df.empty:
+                break
+            
+            duration_df['video_duration'] = duration_df['video_duration'].apply(self.decode_json)
+            db.update_data('transcript_classification', duration_df, idColumnName='video_id')
+            offset += batch_size
+
     
     @staticmethod
     def decode_json(compressed_string):

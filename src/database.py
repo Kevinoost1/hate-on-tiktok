@@ -86,16 +86,19 @@ class Database:
             '''
             conn.executemany(query, values)
 
-    def update_data(self, tableName: str, data: pd.DataFrame) -> None:
-        cols = ", ".join(f"{col} = ?" for col in data.iloc[:, 1:].columns)
+    def update_data(self, tableName: str, data: pd.DataFrame, idColumnName: str = 'id') -> None:
+
+        cols_to_update = [col for col in data.columns if col != idColumnName]
+        cols = ", ".join(f"{col} = ?" for col in cols_to_update)
+        
         values = [
-            tuple(row[1:]) + (row[0],)
-            for row in data.to_numpy()
+            tuple(row[col] for col in cols_to_update) + (row[idColumnName],)
+            for _, row in data.iterrows()
         ]
 
         with self.connect() as conn:
             query = f"""
-            UPDATE {tableName} SET {cols} WHERE id = ?
+            UPDATE {tableName} SET {cols} WHERE {idColumnName} = ?
             """
             conn.executemany(query, values)
 

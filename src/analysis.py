@@ -60,11 +60,11 @@ def main():
     graphs = Graphs()
     stats = Statistics()
 
-    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
+    # dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
     
-    politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
+    # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
     # politics_t_plot_dfs = [df[0] for df in politics_t_dfs]
-    politics_t_model_dfs = [df[1] for df in politics_t_dfs]
+    # politics_t_model_dfs = [df[1] for df in politics_t_dfs]
 
     # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
     # survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
@@ -72,8 +72,8 @@ def main():
     # desc = stats.get_descriptives(dfs)
     # stats.get_civility(civility_dfs)
     # stats.get_survival(survival_dfs)
-    stats.get_timeseries(politics_t_model_dfs)
-    stats.dump_to_json()
+    # stats.get_timeseries(politics_t_model_dfs)
+    # stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_plot_dfs) 
     # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
@@ -81,7 +81,7 @@ def main():
  
     # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
-    # data.extract_duration()
+    data.extract_duration()
 
 
 class PrepareData():
@@ -506,12 +506,12 @@ class DataExtract:
         batch_size = 10000
         while True:
             duration_df = self.database.retrieve_data(tableName='transcript_classification tc INNER JOIN videos_raw v ON v.id=tc.video_id', 
-                                                    colNames=['v.id AS video_id', 'v.video_data_zstd AS video_duration'], offset=offset, batch_size=batch_size)
+                                                    colNames=['tc.id', 'v.video_data_zstd AS video_duration'], offset=offset, batch_size=batch_size)
             if duration_df.empty:
                 break
             
             duration_df['video_duration'] = duration_df['video_duration'].apply(self.decode_json)
-            self.database.update_data('transcript_classification', duration_df, idColumnName='video_id')
+            self.database.update_data('transcript_classification', duration_df, idColumnName='id')
             offset += batch_size
 
     

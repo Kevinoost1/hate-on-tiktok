@@ -54,7 +54,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def main():
-    db = Database('transcript_classification', db_path=BASE_DIR / 'database' / 'old_db.sqlite3')
+    db = Database('transcript_classification', db_path=BASE_DIR / 'database' / 'db.sqlite3')
     prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()

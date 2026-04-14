@@ -54,17 +54,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def main():
-    db = Database('transcript_classification', db_path=BASE_DIR / 'database' / 'db.sqlite3')
+    db = Database('transcript_classification', db_path=BASE_DIR / 'database' / 'old_db.sqlite3')
     prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
 
-    # dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
+    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
     
-    # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
+    politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
     # politics_t_plot_dfs = [df[0] for df in politics_t_dfs]
-    # politics_t_model_dfs = [df[1] for df in politics_t_dfs]
+    politics_t_model_dfs = [df[1] for df in politics_t_dfs]
 
     # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
     # survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
@@ -72,8 +72,8 @@ def main():
     # desc = stats.get_descriptives(dfs)
     # stats.get_civility(civility_dfs)
     # stats.get_survival(survival_dfs)
-    # stats.get_timeseries(politics_t_model_dfs)
-    # stats.dump_to_json()
+    stats.get_timeseries(politics_t_model_dfs)
+    stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_plot_dfs) 
     # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
@@ -81,7 +81,7 @@ def main():
  
     # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
-    data.extract_duration()
+    # data.extract_duration()
 
 
 class PrepareData():
@@ -97,7 +97,7 @@ class PrepareData():
         }
 
 
-    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=8) -> pd.DataFrame:
+    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=15) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()
         df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True) 
         df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
@@ -123,7 +123,7 @@ class PrepareData():
 
         df: pd.DataFrame = pd.concat(user_dfs)
         # RD: only keep the rows where there is 'enough' data
-        df: pd.DataFrame = df[df['n_politics_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
+        df: pd.DataFrame = df[df['n_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
 
         timeseries: pd.DataFrame = df.copy()
 
@@ -269,6 +269,14 @@ class Statistics:
     def __init__(self, outputName: str='stats.json'):
         self.outputName: str = outputName
         self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
+        self.political_events = {
+            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
+            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
+            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
+            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
+            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+        }
         
     def get_descriptives(self, timeSeriesDfs) -> dict[str, dict[str, float]]:
         df: pd.DataFrame = timeSeriesDfs[0].copy()
@@ -367,17 +375,55 @@ class Statistics:
 
     def get_timeseries(self, politics_t_model_dfs):
         df = politics_t_model_dfs[0]
-        print(df.head())
-        model = smf.glm(
-            formula="n_politics_videos / n_videos ~ event",
-            data=df,
-            family=sm.families.Binomial(),
-            weights=df["n_videos"]
-        ).fit(cov_type='cluster', cov_kwds={'groups': df['user_id']})
+        all_dates = df.index.unique().sort_values()
 
-        print(model.summary())
+        results = {} 
+        for analysisType in ['ratio_news', 'ratio_high_intolerance']:
+            local_results = {'p_values': {}, 't_values': {}}
 
-        
+            for name, date in self.political_events.items():
+                event_bin = df.index[all_dates.get_indexer([date], method='nearest')][0]
+                obs = self.get_t_for_timeseries(df, event_bin, analysisColumn=analysisType)
+                perm = []
+
+                for i in range(1000):
+                    perm_date = np.random.choice(all_dates)
+                    perm.append(self.get_t_for_timeseries(df, perm_date, analysisColumn=analysisType))
+
+                p = np.mean(np.array(perm) > np.array(obs))
+                local_results['p_values'][name] = p
+                local_results['t_values'][name] = obs
+
+            results[analysisType] = local_results
+
+        self.jsonContent['Timeseries'].append(results)
+
+                
+    @staticmethod
+    def get_t_for_timeseries(df, date, analysisColumn='ratio_news', days_before_event=5, days_after_event=2):
+        total_dates = df.index.unique()
+
+        event_means = []
+        no_event_means = []
+
+        for user, user_df in df.groupby('user_id'):
+            start = date - pd.Timedelta(days=days_before_event)
+            end = date + pd.Timedelta(days=days_after_event)
+
+            event = user_df[(user_df.index >= start) & (user_df.index <= end)]
+            no_event = user_df[~((user_df.index >= start) & (user_df.index <= end))]
+
+            if len(event) == 0 or len(no_event) == 0:
+                continue
+
+            event_means.append(event[analysisColumn].mean())
+            no_event_means.append(no_event[analysisColumn].mean())
+
+        results = stats.ttest_rel(event_means, no_event_means, alternative='greater', nan_policy='omit')
+
+        return results.statistic
+                
+            
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:
             json.dump(self.jsonContent, f, indent=4)

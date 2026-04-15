@@ -51,6 +51,7 @@ if __name__=='__main__':
     db = Database('transcript_classification')
     id_df = get_results()
     id_df.to_csv(f'id_df_{random.randint(0, 1000)}')
+
     db.update_data('transcript_classification', id_df, predColumnName='topic', probColumName='topic_prob')
     
 

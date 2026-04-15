@@ -102,7 +102,7 @@ class Database:
             """
             conn.executemany(query, values)
 
-    def retrieve_data(self, tableName: str, colNames: list, restrictions: str=None, orderby: str=None, batch_size: int=None, offset: int=None) -> pd.DataFrame:
+    def retrieve_data(self, tableName: str, colNames: list[str], restrictions: str=None, orderby: str=None, batch_size: int=None, offset: int=None) -> pd.DataFrame:
         colNames: str = ', '.join(colNames)
 
         with self.connect() as conn:
@@ -110,7 +110,7 @@ class Database:
             query += f' WHERE {restrictions}' if restrictions else ''
             query += f' ORDER BY {orderby}' if orderby else ''
             query += f' LIMIT {batch_size}' if batch_size else ''
-            query += f' OFFSET {offset}' if batch_size else ''
+            query += f' OFFSET {offset}' if offset else ''
 
             return pd.read_sql(query, conn)
 

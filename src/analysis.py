@@ -522,11 +522,11 @@ class DataExtract:
         dctx = zstd.ZstdDecompressor()
         decompressed = dctx.decompress(compressed_string)
         raw_json = json.loads(decompressed.decode("utf-8")) 
-        try:
-            if "video" in raw_json and "duration" in raw_json["video"]:
-                duration = raw_json["video"]["duration"]
-            else:
-                duration = None
+        # try:
+        if "video" in raw_json and "duration" in raw_json["video"]:
+            duration = raw_json["video"]["duration"]
+        else:
+            duration = None
 
         # except Exception:
             # duration = None

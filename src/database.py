@@ -100,7 +100,6 @@ class Database:
             UPDATE {tableName} SET {cols} WHERE {idColumnName} = ?
             """
             conn.executemany(query, values)
-            conn.commit()
 
     def retrieve_data(self, tableName: str, colNames: list[str], restrictions: str=None, orderby: str=None, batch_size: int=None, offset: int=None) -> pd.DataFrame:
         colNames: str = ', '.join(colNames)

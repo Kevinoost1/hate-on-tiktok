@@ -23,7 +23,7 @@ In main.py you can find an example use for the entire analysis pipeline
 def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColumn, mergeTargetName:str='video_id') -> pd.DataFrame:
     with open('transcripts.txt', 'w', encoding='utf-8') as f:
         for t, d in zip(df[transcriptColumn], df[descriptionColumn]):
-            file.write(t + ' ' + d + '\n')
+            f.write(t + ' ' + d + '\n')
 
     id_df: pd.DataFrame = df[[mergeTargetName]]
     id_df.to_csv('id.csv', index=False)

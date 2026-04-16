@@ -27,6 +27,7 @@ def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColum
 
     id_df: pd.DataFrame = df[[mergeTargetName]]
     id_df.to_csv('id.csv', index=False)
+    print('columns in id_df', id_df.columns)
     return id_df
 
 
@@ -49,9 +50,9 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
 
 if __name__=='__main__':
     db = Database('transcript_classification')
-    id_df = get_results()
+    id_df = get_results(predColumnName='topic', probColumName='topic_prob')
     id_df.to_csv(f'id_df_{random.randint(0, 1000)}')
 
-    db.update_data('transcript_classification', id_df, predColumnName='topic', probColumName='topic_prob')
+    db.update_data('transcript_classification', id_df)
     
 

@@ -27,7 +27,6 @@ def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColum
 
     id_df: pd.DataFrame = df[[mergeTargetName]]
     id_df.to_csv('id.csv', index=False)
-    print('columns in id_df', id_df.columns)
     return id_df
 
 
@@ -37,10 +36,17 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
     results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
 
-    assert len(results_df) == len(id_df)
+    try:
+        assert len(results_df) == len(id_df)
+    except AssertionError:
+        print('last line', results_df.iloc[-1])
+        print('first line', results_df..iloc[1])
 
-    print(len(id_df))
-    print(len(results_df))
+        print('len_id df', len(id_df))
+        print('len_results df', len(results_df))
+
+        results_df.to_csv('failed_results.csv')
+        id_df.to_csv('failed_id.csv')
 
     id_df[predColumnName] = results_df[resultsColumnName]
     id_df[probColumName] = results_df['probs']

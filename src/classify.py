@@ -36,17 +36,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
     results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
 
-    try:
-        assert len(results_df) == len(id_df)
-    except AssertionError:
-        print('last line', results_df.iloc[-1])
-        print('first line', results_df.iloc[1])
-
-        print('len_id df', len(id_df))
-        print('len_results df', len(results_df))
-
-        results_df.to_csv('failed_results.csv')
-        id_df.to_csv('failed_id.csv')
+    assert len(results_df) == len(id_df)
 
     id_df[predColumnName] = results_df[resultsColumnName]
     id_df[probColumName] = results_df['probs']
@@ -57,7 +47,6 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
 if __name__=='__main__':
     db = Database('transcript_classification')
     id_df = get_results(predColumnName='topic', probColumName='topic_prob')
-    id_df.to_csv(f'id_df_{random.randint(0, 1000)}')
 
     db.update_data('transcript_classification', id_df)
     

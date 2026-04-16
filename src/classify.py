@@ -40,7 +40,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
         assert len(results_df) == len(id_df)
     except AssertionError:
         print('last line', results_df.iloc[-1])
-        print('first line', results_df..iloc[1])
+        print('first line', results_df.iloc[1])
 
         print('len_id df', len(id_df))
         print('len_results df', len(results_df))

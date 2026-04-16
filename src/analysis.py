@@ -506,11 +506,13 @@ class DataExtract:
         batch_size = 10000
         while True:
             duration_df = self.database.retrieve_data(tableName='transcript_classification tc INNER JOIN videos_raw v ON v.id=tc.video_id', 
-                                                    colNames=['tc.id', 'v.video_data_zstd AS video_duration'], offset=offset, batch_size=batch_size)
+                                                    colNames=['tc.id', 'v.video_data_zstd AS video_duration'], offset=offset, batch_size=batch_size, orderby='tc.id ASC')
+            print('after retrieval', duration_df.head())
             if duration_df.empty:
                 break
             
             duration_df['video_duration'] = duration_df['video_duration'].apply(self.decode_json)
+            print('after duration decompress', duration_df.head())
             self.database.update_data('transcript_classification', duration_df, idColumnName='id')
             offset += batch_size
 
@@ -526,8 +528,8 @@ class DataExtract:
             else:
                 duration = None
 
-        except Exception:
-            duration = None
+        # except Exception:
+            # duration = None
 
         return duration
 

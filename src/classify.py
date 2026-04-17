@@ -20,7 +20,7 @@ In main.py you can find an example use for the entire analysis pipeline
 '''
 
 
-def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str, descriptionColumn, mergeTargetName:str='video_id') -> pd.DataFrame:
+def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str='translation', descriptionColumn: str='desc', mergeTargetName:str='video_id') -> pd.DataFrame:
     with open('transcripts.txt', 'w', encoding='utf-8') as f:
         for t, d in zip(df[transcriptColumn], df[descriptionColumn]):
             f.write(t + ' ' + d + '\n')

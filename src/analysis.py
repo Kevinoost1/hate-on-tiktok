@@ -54,13 +54,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def main():
-    db = Database('transcript_classification', db_path=BASE_DIR / 'database' / 'db.sqlite3')
+    db = Database(db_path=BASE_DIR / 'database' / 'old_db.sqlite3')
     prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
+    power = SimPowerAnalysis()
 
-    # dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
+    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
+    p = power.compute_power(prep, dfs[0])
+    print(p)
+    p.to_csv('power_report.csv')
     
     # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
     # politics_t_plot_dfs = [df[0] for df in politics_t_dfs]
@@ -81,7 +85,7 @@ def main():
  
     # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
 
-    data.extract_duration()
+    # data.extract_duration()
 
 
 class PrepareData():
@@ -97,23 +101,23 @@ class PrepareData():
         }
 
 
-    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=15) -> pd.DataFrame:
+    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=15, min_users: int=3) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()
         df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True) 
         df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
         df['watchtime_politics'] = df['watch_time_s'] * df['news_politics']
+        df['high_intolerance'] = (df['intolerance'] > 5).astype(int)
         
         df: pd.DataFrame = df.set_index(dateColumnName)
-        df['high_intolerance'] = (df['intolerance'] > 5).astype(int)
-
         df = df.assign(event=0)
+
         event_window: int = 3
         for event_date in self.political_events.values():
             df.loc[(df.index >= event_date - pd.Timedelta(days=event_window)) & (df.index <= event_date), 'event'] = 1
 
         user_dfs = []
         for user, user_df in df.groupby('user_id'):
-            resampled: pd.DataFrame = user_df.resample('5D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'), 
+            resampled: pd.DataFrame = user_df.resample('1D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'), 
                                                                  n_high_intolerance=('high_intolerance', 'sum'), event=('event', 'max'))
             resampled['ratio_news'] = resampled['n_politics_videos'] / resampled['n_videos']
             resampled['avg_watchtime_politics'] = resampled['watchtime_politics'] / resampled['n_politics_videos']
@@ -124,6 +128,10 @@ class PrepareData():
         df: pd.DataFrame = pd.concat(user_dfs)
         # RD: only keep the rows where there is 'enough' data
         df: pd.DataFrame = df[df['n_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
+
+        user_counts = df.groupby(df.index)['user_id'].nunique()
+        valid_dates = user_counts[user_counts >= min_users].index
+        df = df[df.index.isin(valid_dates)]
 
         timeseries: pd.DataFrame = df.copy()
 
@@ -388,7 +396,7 @@ class Statistics:
 
                 for i in range(1000):
                     perm_date = np.random.choice(all_dates)
-                    perm.append(self.get_t_for_timeseries(df, perm_date, analysisColumn=analysisType))
+                    perm.append(self.get_t_for_timeseries(df, perm_date, analysisColumn=analysisType)[0])
 
                 p = np.mean(np.array(perm) > np.array(obs))
                 local_results['p_values'][name] = p
@@ -421,7 +429,7 @@ class Statistics:
 
         results = stats.ttest_rel(event_means, no_event_means, alternative='greater', nan_policy='omit')
 
-        return results.statistic
+        return results.statistic, results.pvalue
                 
             
     def dump_to_json(self):
@@ -501,38 +509,98 @@ class DataExtract:
         
         return channels['official'], channels['unofficial'], channels['ordering']
 
+
+    # When you run this, convert row values to int in the Database() class
     def extract_duration(self):
-        offset = 0
-        batch_size = 10000
+        batch_size=1000
         while True:
             duration_df = self.database.retrieve_data(tableName='transcript_classification tc INNER JOIN videos_raw v ON v.id=tc.video_id', 
-                                                    colNames=['tc.id', 'v.video_data_zstd AS video_duration'], offset=offset, batch_size=batch_size, orderby='tc.id ASC')
-            print('after retrieval', duration_df.head())
+                                                    colNames=['tc.id', 'v.video_data_zstd AS video_duration'], restrictions='tc.video_duration IS NULL',
+                                                    batch_size=batch_size, orderby='tc.id ASC') 
             if duration_df.empty:
                 break
-            
-            duration_df['video_duration'] = duration_df['video_duration'].apply(self.decode_json)
-            print('after duration decompress', duration_df.head())
-            self.database.update_data('transcript_classification', duration_df, idColumnName='id')
-            offset += batch_size
 
-    
+            duration_df['video_duration'] = duration_df['video_duration'].apply(self.decode_json)
+            
+            self.database.update_data(tableName='transcript_classification', data=duration_df)
+             
     @staticmethod
     def decode_json(compressed_string):
         dctx = zstd.ZstdDecompressor()
         decompressed = dctx.decompress(compressed_string)
         raw_json = json.loads(decompressed.decode("utf-8")) 
-        # try:
+
         if "video" in raw_json and "duration" in raw_json["video"]:
             duration = raw_json["video"]["duration"]
         else:
-            duration = None
+            duration = None 
 
-        # except Exception:
-            # duration = None
+        return int(duration)
+        
 
-        return duration
+class SimPowerAnalysis:
+    def __init__(self, n_sims=10, alpha=0.05):
+        self.political_events = {
+            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
+            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
+            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
+            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
+            # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+        }
+        self.n_sims = n_sims
+        self.alpha = alpha
 
+    def simulate_dataset(self, df, effect_size=0.05):
+        sim = df.copy()
+
+        sim['news_politics'] = (sim['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
+        base_p = sim['news_politics'].mean()
+
+        sim['event_sim'] = 0
+        for d in self.political_events.values():
+            date_col = 'date_ymd'
+            sim[date_col] = pd.to_datetime(sim[date_col])
+
+            sim.loc[(sim[date_col] >= d - pd.Timedelta(days=3)) & (sim[date_col] <= d), 'event_sim'] = 1
+
+        p = base_p + effect_size * sim['event_sim']
+        sim['ll3_topic_single_pred'] = np.where(np.random.rand(len(sim)) < np.clip(p, 0, 1), 'Politics & Social Issues', 'Other')
+
+        return sim
+
+    def apply_pipeline(self, prep, df, cutoff, min_users):
+        graph_df, ts = prep.construct_politics_t(df.reset_index(), cutoff=cutoff)
+
+        counts = ts.groupby(ts.index)['user_id'].nunique()
+        valid_dates = counts[counts >= min_users].index
+        ts = ts[ts.index.isin(valid_dates)]
+
+        return ts
+
+    def compute_power(self, prep, df, cutoff_grid=[0,5,10,15], min_user_grid=[2,3,5]):
+        results = []
+
+        for cutoff in cutoff_grid:
+            for min_users in min_user_grid:
+                detections = []
+
+                for i in range(self.n_sims):
+                    sim_df = self.simulate_dataset(df)
+                    ts = self.apply_pipeline(prep, sim_df, cutoff, min_users)
+
+                    event_date = list(self.political_events.values())[0]
+                    t, p = Statistics.get_t_for_timeseries(ts, event_date)
+                    print(t)
+                    print(p)
+
+                    detections.append(p < self.alpha)
+
+                power = np.mean(detections)
+
+                results.append({'cutoff': cutoff, 'min_users': min_users, 'power': power})
+
+        return pd.DataFrame(results)
 
 
 

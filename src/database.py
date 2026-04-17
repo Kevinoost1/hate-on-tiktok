@@ -89,10 +89,9 @@ class Database:
     def update_data(self, tableName: str, data: pd.DataFrame, idColumnName: str = 'id') -> None:
         cols_to_update = [col for col in data.columns if col != idColumnName]
         cols = ", ".join(f"{col} = ?" for col in cols_to_update)
-        print('cols_to_update', cols_to_update)
         
         values = [
-            tuple(row[col] for col in cols_to_update) + (row[idColumnName],)
+            tuple(row[col] for col in cols_to_update) + (int(row[idColumnName]),)
             for _, row in data.iterrows()
         ]
 
@@ -101,6 +100,8 @@ class Database:
             UPDATE {tableName} SET {cols} WHERE {idColumnName} = ?
             """
             conn.executemany(query, values)
+            conn.commit()
+
 
     def retrieve_data(self, tableName: str, colNames: list[str], restrictions: str=None, orderby: str=None, batch_size: int=None, offset: int=None) -> pd.DataFrame:
         colNames: str = ', '.join(colNames)

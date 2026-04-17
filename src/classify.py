@@ -23,7 +23,9 @@ In main.py you can find an example use for the entire analysis pipeline
 def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str='translation', descriptionColumn: str='desc', mergeTargetName:str='video_id') -> pd.DataFrame:
     with open('transcripts.txt', 'w', encoding='utf-8') as f:
         for t, d in zip(df[transcriptColumn], df[descriptionColumn]):
-            f.write(t + ' ' + d + '\n')
+            t_clean = str(t).replace('\n', ' ').replace('\r', ' ')
+            d_clean = str(d).replace('\n', ' ').replace('\r', ' ')
+            f.write(t_clean + ' ' + d_clean + '\n')    
 
     id_df: pd.DataFrame = df[[mergeTargetName]]
     id_df.to_csv('id.csv', index=False)
@@ -50,7 +52,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
 
 
 if __name__=='__main__':
-    db = Database('transcript_classification')
+    db = Database('transcript_classification', db_path="/projects/pi-mai/Project-Data-Donation/database/db.sqlite3")
     id_df = get_results(predColumnName='topic', probColumName='topic_prob')
 
     db.update_data('transcript_classification', id_df)

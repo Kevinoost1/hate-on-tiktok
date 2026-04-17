@@ -5,7 +5,7 @@ from classify import transcripts_to_txt, get_results
 
 def main():
     preprocess = Preprocess()
-    database = Database('transcript_classification')
+    database = Database('transcript_classification', db_path="/projects/pi-mai/Project-Data-Donation/database/db.sqlite3")
     database.enforce_correct_structure('transcript_classification') 
 
 

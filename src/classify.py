@@ -38,13 +38,8 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
     results_df: pd.DataFrame = pd.read_csv(results_csvName)
     id_df: pd.DataFrame = pd.read_csv(id_csvName)
 
-    try:
-        assert len(results_df) == len(id_df)
-    except AssertionError:
-        results_df.to_csv('faulty_results.csv')
-        id_df.to_csv('faulty_id.csv')
-        return None
-
+    assert len(results_df) == len(id_df)
+ 
     id_df[predColumnName] = results_df[resultsColumnName]
     id_df[probColumName] = results_df['probs']
 

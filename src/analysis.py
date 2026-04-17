@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from database import *
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('TkAgg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 import json
@@ -11,6 +11,7 @@ import scipy.stats as stats
 from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 from pathlib import Path
+from mne.stats import permutation_cluster_1samp_test
 # import statsmodels.api as sm
 # import statsmodels.formula.api as smf
 
@@ -62,9 +63,12 @@ def main():
     power = SimPowerAnalysis()
 
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
-    p = power.compute_power(prep, dfs[0])
-    print(p)
-    p.to_csv('power_report.csv')
+    epoch = prep.eeg(dfs[0])
+    print(epoch)
+
+    stats.eeg_analysis(epoch)
+    stats.plot_erp(epoch)
+
     
     # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
     # politics_t_plot_dfs = [df[0] for df in politics_t_dfs]
@@ -100,6 +104,31 @@ class PrepareData():
             # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
+    def eeg(self, timeSeriesDf: pd.DataFrame, pre_window=14, post_window=3):
+        df = timeSeriesDf.copy()
+        df['date_ymd'] = pd.to_datetime(df['date_ymd'])
+
+        epochs = []
+        for name, event in self.political_events.items():
+            relative_day = (df['date_ymd'] - event).dt.days
+            in_window = relative_day.between(-pre_window, post_window)
+
+            temp = df.loc[(in_window)].copy()
+            temp['event'] = name
+            temp['relative_day'] = relative_day[in_window]
+            epochs.append(temp)
+
+        df_epochs = pd.concat(epochs, ignore_index=True)
+        df_epochs['is_news'] = (df_epochs['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
+        agg = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(
+                    n_news=('is_news', 'sum'), 
+                    n_total=('is_news', 'count')
+                ).reset_index()
+
+        agg['ratio'] = agg['n_news'] / agg['n_total']
+        per_user = agg.groupby(['user_id', 'relative_day']).apply(lambda x: np.average(x['ratio'], weights=x['n_total'])).reset_index(name='ratio')
+
+        return per_user
 
     def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=15, min_users: int=3) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()
@@ -324,6 +353,42 @@ class Statistics:
         self.jsonContent['Descriptives'].append(descriptives)
 
         return descriptives
+
+    def eeg_analysis(self, politics_t_df):
+        df = politics_t_df.pivot(index='user_id', columns='relative_day', values='ratio')
+        df = df.sort_index(axis=1)
+
+        # RD: fill missing values with mean -> reasonable since normally their mean content ratio is pretty stable
+        df = df.interpolate(axis=1, limit_direction='both')
+        print('shape', df)
+
+        # RD: subtract the mean to see change relative to the mean at the events
+        df = df.subtract(df.mean(axis=1), axis=0)
+
+        x = df.values  
+        t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
+        print('t', t)
+        print('clusters', clusters)
+        print('p', p)
+
+    def plot_erp(self, df, title="pretty cool erp thingy for all events"):
+        matrix = df.pivot(index='user_id', columns='relative_day', values='ratio')
+        matrix = matrix.sort_index(axis=1)
+
+        mean = matrix.mean(axis=0)
+        sem = matrix.std(axis=0) / np.sqrt(len(matrix))
+
+        plt.figure(figsize=(8,5))
+        plt.plot(mean.index, mean.values, label='Mean')
+        plt.fill_between(mean.index, mean-sem, mean+sem, alpha=0.3)
+
+        plt.axvline(0, linestyle='--', label='Event')
+        plt.xlabel('Days relative to event')
+        plt.ylabel('News exposure (baseline corrected)')
+        plt.title(title)
+        plt.legend()
+        plt.show()
+
 
     def get_civility(self, civilityDfs) -> dict[str, float]:
         dfs: pd.DataFrame = civilityDfs

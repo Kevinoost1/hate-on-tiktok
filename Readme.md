@@ -12,16 +12,16 @@ The pipeline is supported by two seperate parts:
 2. validation.py -> contains methods to aid with validating and testing the performance of the few-shot classification 
 
 ## General use tips
-- The most easy way to use the code, is to clone the repository with git. 
-Most classes take specific path names for the files they might use. As a default this path mirrors the repository of the code by making use of the parent directory, i.e. the directory that contains the subdirectory 'src'
-If you wish to change the file structure of the code, be sure to change the path arguments for the classes.
+- The most easy way to use the code, is to clone the repository with git. \n
+Most classes take specific path names for the files they might use. As a default this path mirrors the repository of the code by making use of the parent directory, i.e. the directory that contains the subdirectory 'src' \n
+If you wish to change the file structure of the code, be sure to change the path arguments for the classes. \n
 
 - Be sure to also copy the following file: src/channel_def.json -> This contains the definitions for official/unofficial channel and the ordering with which they entire the multiverse analysis
-If you cloned the repository, this should be included. 
+If you cloned the repository, this should be included. \n
 
 - If you use the code in combination with a .sqlite3 database, it has to follow the structure desired by the code.
-database.py has an enforce_structure() method, but this is only useful for adding the classification specific columns in an existing table which consists of ids, video_ids, language_ids, and subtitles
-You can off course also adapt the code to your own databases' structure
+database.py has an enforce_structure() method, but this is only useful for adding the classification specific columns in an existing table which consists of ids, video_ids, language_ids, and subtitles. \n
+You can off course also adapt the code to your own databases' structure. \n
 
 # Preprocessing, translating, and filtering
 - Initialize the class Preprocess()

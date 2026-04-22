@@ -12,8 +12,12 @@ from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 from pathlib import Path
 from mne.stats import permutation_cluster_1samp_test
+from statsmodels.stats.multitest import multipletests
+from statsmodels.nonparametric.smoothers_lowess import lowess
+import math
 # import statsmodels.api as sm
 # import statsmodels.formula.api as smf
+
 
 
 """
@@ -63,11 +67,10 @@ def main():
     power = SimPowerAnalysis()
 
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
-    epoch = prep.eeg(dfs[0])
-    print(epoch)
-
+    epoch = prep.preprocess_epochs(dfs[0])
     stats.eeg_analysis(epoch)
-    stats.plot_erp(epoch)
+
+    graphs.create_timeseries_graph(dfs[0])
 
     
     # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
@@ -104,7 +107,7 @@ class PrepareData():
             # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
-    def eeg(self, timeSeriesDf: pd.DataFrame, pre_window=14, post_window=3):
+    def preprocess_epochs(self, timeSeriesDf: pd.DataFrame, pre_window=14, post_window=3):
         df = timeSeriesDf.copy()
         df['date_ymd'] = pd.to_datetime(df['date_ymd'])
 
@@ -120,59 +123,14 @@ class PrepareData():
 
         df_epochs = pd.concat(epochs, ignore_index=True)
         df_epochs['is_news'] = (df_epochs['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-        agg = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(
-                    n_news=('is_news', 'sum'), 
-                    n_total=('is_news', 'count')
-                ).reset_index()
+        df_epochs['high_int'] = (df_epochs['intolerance'] >= 5).astype(int)
+
+        agg = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_civility=('high_int', 'sum')).reset_index()
 
         agg['ratio'] = agg['n_news'] / agg['n_total']
-        per_user = agg.groupby(['user_id', 'relative_day']).apply(lambda x: np.average(x['ratio'], weights=x['n_total'])).reset_index(name='ratio')
+        agg['int_ratio'] = agg['n_civility'] / agg['n_news']
 
-        return per_user
-
-    def construct_politics_t(self, timeSeriesDf: pd.DataFrame, dateColumnName: str='date_ymd', topicColumnName: str='ll3_topic_single_pred', cutoff: int=15, min_users: int=3) -> pd.DataFrame:
-        df: pd.DataFrame = timeSeriesDf.copy()
-        df[dateColumnName] = pd.to_datetime(timeSeriesDf[dateColumnName], yearfirst=True) 
-        df['news_politics'] = (df[topicColumnName] == 'Politics & Social Issues').astype(int)
-        df['watchtime_politics'] = df['watch_time_s'] * df['news_politics']
-        df['high_intolerance'] = (df['intolerance'] > 5).astype(int)
-        
-        df: pd.DataFrame = df.set_index(dateColumnName)
-        df = df.assign(event=0)
-
-        event_window: int = 3
-        for event_date in self.political_events.values():
-            df.loc[(df.index >= event_date - pd.Timedelta(days=event_window)) & (df.index <= event_date), 'event'] = 1
-
-        user_dfs = []
-        for user, user_df in df.groupby('user_id'):
-            resampled: pd.DataFrame = user_df.resample('1D').agg(n_videos=('video_id', 'count'), n_politics_videos=('news_politics', 'sum'), watchtime_politics=('watchtime_politics', 'sum'), 
-                                                                 n_high_intolerance=('high_intolerance', 'sum'), event=('event', 'max'))
-            resampled['ratio_news'] = resampled['n_politics_videos'] / resampled['n_videos']
-            resampled['avg_watchtime_politics'] = resampled['watchtime_politics'] / resampled['n_politics_videos']
-            resampled['ratio_high_intolerance'] = resampled['n_high_intolerance'] / resampled['n_politics_videos']
-            resampled['user_id'] = user
-            user_dfs.append(resampled)
-
-        df: pd.DataFrame = pd.concat(user_dfs)
-        # RD: only keep the rows where there is 'enough' data
-        df: pd.DataFrame = df[df['n_videos'] >= cutoff]      # TO DO: make it so it only keeps the bins that have over {cutoff} support and have x bins before over {cutoff support}
-
-        user_counts = df.groupby(df.index)['user_id'].nunique()
-        valid_dates = user_counts[user_counts >= min_users].index
-        df = df[df.index.isin(valid_dates)]
-
-        timeseries: pd.DataFrame = df.copy()
-
-        df:pd.DataFrame = df.groupby(df.index).agg(mean_ratio=('ratio_news', 'mean'), sem_ratio=('ratio_news', lambda x: x.std()/np.sqrt(len(x))), 
-                                                   mean_watch_time=('avg_watchtime_politics', 'mean'), sem_watch_time=('avg_watchtime_politics', lambda x: x.std()/np.sqrt(len(x))),
-                                                   mean_intolerance=('ratio_high_intolerance', 'mean'), sem_intolerance=('ratio_high_intolerance', lambda x: x.std()/np.sqrt(len(x))))
-
-        df['mean_ratio'] = df['mean_ratio'].rolling(window=5, min_periods=1, center=True).mean()
-        df['mean_watch_time'] = df['mean_watch_time'].rolling(window=5, min_periods=1, center=True).mean()
-        df['mean_intolerance'] = df['mean_intolerance'].rolling(window=5, min_periods=1, center=True).mean()
-
-        return df, timeseries
+        return agg
 
 
     def construct_civility(self, timeSeriesDf: pd.DataFrame, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
@@ -202,9 +160,9 @@ class Graphs():
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
             'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
             'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
-            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
-            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20')
+            # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
     # TO DO: make the graph nicer    
@@ -235,38 +193,63 @@ class Graphs():
 
         return fig
 
-    # TO DO: make the graph nicer
-    def create_timeseries_graph(self, dfs: list[pd.DataFrame]): 
-        df = dfs[0]
 
-        fig, axes = plt.subplots(3, 1, figsize=(12, 6), sharex=True)
+    # TO DO: make the graph nicer
+    def create_timeseries_graph(self, timeSeriesDf): 
+        df = timeSeriesDf.copy()
+
+        df['is_news'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
+        per_user = df.groupby(['user_id', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count')).reset_index()
+        per_user['ratio'] = per_user['n_news'] / per_user['n_total']
+
+        print(per_user.groupby('user_id').agg(mean=('ratio', 'mean')))
+
+        grand_avg = per_user.groupby('date_ymd').agg(mean_ratio=('ratio', 'mean'), sem_ratio=('ratio', lambda x: x.std() / np.sqrt(len(x))), 
+                                                    n_users=('user_id', 'nunique'), n_videos=('n_total', 'sum')).reset_index()
+
+        # RD: just for plotting we use a weighted mean to display the grand average (individual points are non-weighted)
+        w = per_user.groupby('date_ymd').apply(lambda x: np.average(x['ratio'], weights=x['n_total'])).rename('w_ratio').reset_index()
+        grand_avg = grand_avg.merge(w, on='date_ymd', how='left')
+ 
+        transp = (grand_avg['n_users'] - grand_avg['n_users'].min()) / (grand_avg['n_users'].max() - grand_avg['n_users'].min())
+        transp = transp.fillna(0.1)
+
+        fig, axes = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [3, 1, 1]})
+        for i, row in grand_avg.iterrows():
+            axes[0].scatter(row['date_ymd'], row['mean_ratio'], color=self.colors['dark_blue'], alpha=transp.iloc[i], s=15)
+
+        assert not (row['n_videos'] > 0 and row['n_users'] == 0)
+
+        axes[0].plot(grand_avg['date_ymd'], grand_avg['mean_ratio'], color=self.colors['dark_blue'], linewidth=2.5, label='weighted average')
+        axes[0].fill_between(grand_avg['date_ymd'], grand_avg['mean_ratio'] - grand_avg['sem_ratio'], grand_avg['mean_ratio'] + grand_avg['sem_ratio'], color=self.colors['dark_blue'], alpha=0.15)
 
         for label, date in self.political_events.items():
-            for ax in axes:
-                ax.axvline(date, linestyle='--', label=label, color=self.colors['green'])
-        axes[0].legend()
+            axes[0].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
+            axes[0].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
+            axes[1].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
+            axes[1].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
+            axes[2].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
+            axes[2].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
 
-        axes[0].plot(df.index, df['mean_ratio'], marker='o', color=self.colors['dark_blue'])
-        axes[0].fill_between(df.index, df['mean_ratio'] - df['sem_ratio'], df['mean_ratio'] + df['sem_ratio'], color=self.colors['dark_blue'], alpha=0.3)
-        axes[0].set_ylabel('Ratio News, Politics & Societal Issues Videos')
-        axes[0].set_ylim(0, (df['mean_ratio'] + df['sem_ratio']).max())
-        axes[0].set_title('Ratio News, Politics & Societal Issues Videos over Time')
-                
-        axes[1].plot(df.index, df['mean_watch_time'], marker='o', color=self.colors['brown'])
-        axes[1].fill_between(df.index, df['mean_watch_time'] - df['sem_watch_time'], df['mean_watch_time'] + df['sem_watch_time'], color=self.colors['brown'], alpha=0.3)
-        axes[1].set_xlabel('Starting Date')
-        axes[1].set_ylim(0, (df['mean_watch_time'] + df['sem_watch_time']).max())
-        axes[1].set_ylabel('Mean Watch Time (sec) on News, Politics & Societal Issues Videos')
+        axes[0].set_ylabel('Ratio News in Feed')
+        axes[0].set_title("Exposure to News, Politics & Societal Issues Content over Time")
+        axes[0].legend(frameon=False)
+        axes[0].set_xlim(pd.to_datetime('2023-09-01'), pd.to_datetime('2025-02-01'))
+        axes[0].set_ylim(grand_avg['sem_ratio'].min(), grand_avg['sem_ratio'].max())
 
-        axes[2].plot(df.index, df['mean_intolerance'], marker='o', color=self.colors['purple'])
-        axes[2].fill_between(df.index, df['mean_intolerance'] - df['sem_intolerance'], df['mean_intolerance'] + df['sem_intolerance'], color=self.colors['purple'], alpha=0.3)
-        axes[2].set_ylabel('Mean Intolerance Rating')
-        axes[2].set_ylim(0, (df['mean_intolerance'] + df['sem_intolerance']).max())
+        axes[1].plot(grand_avg['date_ymd'], grand_avg['n_videos'], color=self.colors['brown'], linewidth=1.5, label='Number of Videos')
+        axes[1].set_ylabel('Number of Videos')
+        axes[1].legend(frameon=False)
+
+        axes[2].plot(grand_avg['date_ymd'], grand_avg['n_users'], color=self.colors['orange'], alpha=0.5, label='Number of Participants')
+        axes[2].set_ylabel('Number of Participants')
+        axes[2].legend(frameon=False)
 
         plt.xticks(rotation=45)
         plt.tight_layout()
+        plt.show()
 
-        return fig       
+
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]):
         results = dfs
@@ -354,40 +337,28 @@ class Statistics:
 
         return descriptives
 
-    def eeg_analysis(self, politics_t_df):
-        df = politics_t_df.pivot(index='user_id', columns='relative_day', values='ratio')
-        df = df.sort_index(axis=1)
+    # TO DO: Append results to Dict
+    def eeg_analysis(self, politics_t_df): 
+        results = {}
 
-        # RD: fill missing values with mean -> reasonable since normally their mean content ratio is pretty stable
-        df = df.interpolate(axis=1, limit_direction='both')
-        print('shape', df)
+        df = politics_t_df
+        for event in df['event'].unique():
+            local_results = {}
 
-        # RD: subtract the mean to see change relative to the mean at the events
-        df = df.subtract(df.mean(axis=1), axis=0)
+            for analysis_type, col in {'news': 'ratio', 'int': 'int_ratio'}.items():
+                df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=col).sort_index(axis=1)
+                df_event = df_event.interpolate(axis=1, limit_direction='both')
+                # df_event = df_event.subtract(df_event.mean(axis=1), axis=0)
 
-        x = df.values  
-        t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
-        print('t', t)
-        print('clusters', clusters)
-        print('p', p)
+                x = df_event.values
+                print(x)
+                t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
+                
+                local_results[analysis_type] = {'t': t, 'clusters': clusters, 'p': p}
 
-    def plot_erp(self, df, title="pretty cool erp thingy for all events"):
-        matrix = df.pivot(index='user_id', columns='relative_day', values='ratio')
-        matrix = matrix.sort_index(axis=1)
+            results[event] = local_results
 
-        mean = matrix.mean(axis=0)
-        sem = matrix.std(axis=0) / np.sqrt(len(matrix))
-
-        plt.figure(figsize=(8,5))
-        plt.plot(mean.index, mean.values, label='Mean')
-        plt.fill_between(mean.index, mean-sem, mean+sem, alpha=0.3)
-
-        plt.axvline(0, linestyle='--', label='Event')
-        plt.xlabel('Days relative to event')
-        plt.ylabel('News exposure (baseline corrected)')
-        plt.title(title)
-        plt.legend()
-        plt.show()
+        print(results)
 
 
     def get_civility(self, civilityDfs) -> dict[str, float]:
@@ -444,58 +415,7 @@ class Statistics:
         summary = cph.summary.to_dict()
         self.jsonContent['Watchtime'].append(summary)
 
-        return summary
-
-    def get_timeseries(self, politics_t_model_dfs):
-        df = politics_t_model_dfs[0]
-        all_dates = df.index.unique().sort_values()
-
-        results = {} 
-        for analysisType in ['ratio_news', 'ratio_high_intolerance']:
-            local_results = {'p_values': {}, 't_values': {}}
-
-            for name, date in self.political_events.items():
-                event_bin = df.index[all_dates.get_indexer([date], method='nearest')][0]
-                obs = self.get_t_for_timeseries(df, event_bin, analysisColumn=analysisType)
-                perm = []
-
-                for i in range(1000):
-                    perm_date = np.random.choice(all_dates)
-                    perm.append(self.get_t_for_timeseries(df, perm_date, analysisColumn=analysisType)[0])
-
-                p = np.mean(np.array(perm) > np.array(obs))
-                local_results['p_values'][name] = p
-                local_results['t_values'][name] = obs
-
-            results[analysisType] = local_results
-
-        self.jsonContent['Timeseries'].append(results)
-
-                
-    @staticmethod
-    def get_t_for_timeseries(df, date, analysisColumn='ratio_news', days_before_event=5, days_after_event=2):
-        total_dates = df.index.unique()
-
-        event_means = []
-        no_event_means = []
-
-        for user, user_df in df.groupby('user_id'):
-            start = date - pd.Timedelta(days=days_before_event)
-            end = date + pd.Timedelta(days=days_after_event)
-
-            event = user_df[(user_df.index >= start) & (user_df.index <= end)]
-            no_event = user_df[~((user_df.index >= start) & (user_df.index <= end))]
-
-            if len(event) == 0 or len(no_event) == 0:
-                continue
-
-            event_means.append(event[analysisColumn].mean())
-            no_event_means.append(no_event[analysisColumn].mean())
-
-        results = stats.ttest_rel(event_means, no_event_means, alternative='greater', nan_policy='omit')
-
-        return results.statistic, results.pvalue
-                
+        return summary   
             
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:
@@ -531,6 +451,7 @@ class DataExtract:
             timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(users, on='user_id', how='inner').drop(columns=['name']) 
             timeSeriesDf = self.rollback_age(timeSeriesDf)
         
+        timeSeriesDf = timeSeriesDf[timeSeriesDf['ll3_topic_single_pred'].notna()].copy()
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
         if channelOrdering: 
             for n in range(len(ordering)):
@@ -601,73 +522,6 @@ class DataExtract:
             duration = None 
 
         return int(duration)
-        
-
-class SimPowerAnalysis:
-    def __init__(self, n_sims=10, alpha=0.05):
-        self.political_events = {
-            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
-            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
-            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
-            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
-            # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
-        }
-        self.n_sims = n_sims
-        self.alpha = alpha
-
-    def simulate_dataset(self, df, effect_size=0.05):
-        sim = df.copy()
-
-        sim['news_politics'] = (sim['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-        base_p = sim['news_politics'].mean()
-
-        sim['event_sim'] = 0
-        for d in self.political_events.values():
-            date_col = 'date_ymd'
-            sim[date_col] = pd.to_datetime(sim[date_col])
-
-            sim.loc[(sim[date_col] >= d - pd.Timedelta(days=3)) & (sim[date_col] <= d), 'event_sim'] = 1
-
-        p = base_p + effect_size * sim['event_sim']
-        sim['ll3_topic_single_pred'] = np.where(np.random.rand(len(sim)) < np.clip(p, 0, 1), 'Politics & Social Issues', 'Other')
-
-        return sim
-
-    def apply_pipeline(self, prep, df, cutoff, min_users):
-        graph_df, ts = prep.construct_politics_t(df.reset_index(), cutoff=cutoff)
-
-        counts = ts.groupby(ts.index)['user_id'].nunique()
-        valid_dates = counts[counts >= min_users].index
-        ts = ts[ts.index.isin(valid_dates)]
-
-        return ts
-
-    def compute_power(self, prep, df, cutoff_grid=[0,5,10,15], min_user_grid=[2,3,5]):
-        results = []
-
-        for cutoff in cutoff_grid:
-            for min_users in min_user_grid:
-                detections = []
-
-                for i in range(self.n_sims):
-                    sim_df = self.simulate_dataset(df)
-                    ts = self.apply_pipeline(prep, sim_df, cutoff, min_users)
-
-                    event_date = list(self.political_events.values())[0]
-                    t, p = Statistics.get_t_for_timeseries(ts, event_date)
-                    print(t)
-                    print(p)
-
-                    detections.append(p < self.alpha)
-
-                power = np.mean(detections)
-
-                results.append({'cutoff': cutoff, 'min_users': min_users, 'power': power})
-
-        return pd.DataFrame(results)
-
-
 
 if __name__=='__main__':
     main()

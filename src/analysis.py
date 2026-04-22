@@ -13,7 +13,6 @@ import zstandard as zstd
 from pathlib import Path
 from mne.stats import permutation_cluster_1samp_test
 from statsmodels.stats.multitest import multipletests
-from statsmodels.nonparametric.smoothers_lowess import lowess
 import math
 # import statsmodels.api as sm
 # import statsmodels.formula.api as smf
@@ -64,11 +63,10 @@ def main():
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
-    power = SimPowerAnalysis()
 
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
-    epoch = prep.preprocess_epochs(dfs[0])
-    stats.eeg_analysis(epoch)
+    event_df, baseline_df = prep.preprocess_epochs(dfs[0])
+    stats.eeg_analysis(event_df, baseline_df)
 
     graphs.create_timeseries_graph(dfs[0])
 
@@ -84,7 +82,7 @@ def main():
     # stats.get_civility(civility_dfs)
     # stats.get_survival(survival_dfs)
     # stats.get_timeseries(politics_t_model_dfs)
-    # stats.dump_to_json()
+    stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_plot_dfs) 
     # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
@@ -107,11 +105,12 @@ class PrepareData():
             # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
-    def preprocess_epochs(self, timeSeriesDf: pd.DataFrame, pre_window=14, post_window=3):
+    def preprocess_epochs(self, timeSeriesDf: pd.DataFrame, pre_window=14, post_window=3, non_event_window=28):
         df = timeSeriesDf.copy()
         df['date_ymd'] = pd.to_datetime(df['date_ymd'])
 
         epochs = []
+        baselines = []
         for name, event in self.political_events.items():
             relative_day = (df['date_ymd'] - event).dt.days
             in_window = relative_day.between(-pre_window, post_window)
@@ -121,16 +120,28 @@ class PrepareData():
             temp['relative_day'] = relative_day[in_window]
             epochs.append(temp)
 
+            in_baseline_window = relative_day.between(-non_event_window, -pre_window - 1)
+            temp_base = df.loc[in_baseline_window].copy()
+            temp_base['event'] = name
+            temp_base['relative_day'] = relative_day[in_baseline_window]
+            baselines.append(temp_base)
+
         df_epochs = pd.concat(epochs, ignore_index=True)
-        df_epochs['is_news'] = (df_epochs['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-        df_epochs['high_int'] = (df_epochs['intolerance'] >= 5).astype(int)
+        df_baseline = pd.concat(baselines, ignore_index=True)
 
-        agg = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_civility=('high_int', 'sum')).reset_index()
+        for d in [df_epochs, df_baseline]:
+            d['is_news'] = (d['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
+            d['high_int'] = (d['intolerance'] >= 5).astype(int)
 
-        agg['ratio'] = agg['n_news'] / agg['n_total']
-        agg['int_ratio'] = agg['n_civility'] / agg['n_news']
+        event_df = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_civility=('high_int', 'sum')).reset_index()
+        event_df['ratio'] = event_df['n_news'] / event_df['n_total']
+        event_df['int_ratio'] = event_df['n_civility'] / event_df['n_news']
 
-        return agg
+        baseline = df_baseline.groupby(['user_id', 'event']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_civility=('high_int', 'sum')).reset_index()
+        baseline['baseline_ratio'] = baseline['n_news'] / baseline['n_total']
+        baseline['baseline_int_ratio'] = baseline['n_civility'] / baseline['n_news']
+
+        return event_df, baseline
 
 
     def construct_civility(self, timeSeriesDf: pd.DataFrame, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
@@ -202,8 +213,6 @@ class Graphs():
         per_user = df.groupby(['user_id', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count')).reset_index()
         per_user['ratio'] = per_user['n_news'] / per_user['n_total']
 
-        print(per_user.groupby('user_id').agg(mean=('ratio', 'mean')))
-
         grand_avg = per_user.groupby('date_ymd').agg(mean_ratio=('ratio', 'mean'), sem_ratio=('ratio', lambda x: x.std() / np.sqrt(len(x))), 
                                                     n_users=('user_id', 'nunique'), n_videos=('n_total', 'sum')).reset_index()
 
@@ -248,7 +257,6 @@ class Graphs():
         plt.xticks(rotation=45)
         plt.tight_layout()
         plt.show()
-
 
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]):
@@ -337,28 +345,34 @@ class Statistics:
 
         return descriptives
 
-    # TO DO: Append results to Dict
-    def eeg_analysis(self, politics_t_df): 
+    
+    def eeg_analysis(self, politics_t_event_df, politics_t_baseline_df): 
         results = {}
 
-        df = politics_t_df
+        df = politics_t_event_df.merge(politics_t_baseline_df, on=['user_id', 'event'], how='inner')
+        df['c_news_ratio'] = df['ratio'] - df['baseline_ratio']
+        df['c_int_ratio'] = df['int_ratio'] - df['baseline_int_ratio']
+
         for event in df['event'].unique():
             local_results = {}
 
-            for analysis_type, col in {'news': 'ratio', 'int': 'int_ratio'}.items():
+            for analysis_type, col in {'news': 'c_news_ratio', 'int': 'c_int_ratio'}.items():
                 df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=col).sort_index(axis=1)
-                df_event = df_event.interpolate(axis=1, limit_direction='both')
-                # df_event = df_event.subtract(df_event.mean(axis=1), axis=0)
 
+                # RD: participants who were active in the analysis window, but not on a specific day get 0 on their ratios after baseline correction, essentially pre-analysis window mean imputation
+                df_event = df_event.fillna(0)
+                        
                 x = df_event.values
-                print(x)
                 t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
                 
-                local_results[analysis_type] = {'t': t, 'clusters': clusters, 'p': p}
-
+                timepoints = df_event.columns.values
+                local_results[analysis_type] = {'t': t.tolist(), 
+                                                'clusters': [{'start_day': int(timepoints[c[0].start]), 'end_day': int(timepoints[c[0].stop - 1])} for c in clusters], 
+                                                'p': p.tolist()}
             results[event] = local_results
 
-        print(results)
+        self.jsonContent['Timeseries'].append(results)
+        return results
 
 
     def get_civility(self, civilityDfs) -> dict[str, float]:

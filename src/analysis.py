@@ -9,11 +9,11 @@ from matplotlib.lines import Line2D
 import json
 import seaborn as sns
 import scipy.stats as stats
-# from lifelines import KaplanMeierFitter, CoxPHFitter
+from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 from pathlib import Path
-# from mne.stats import permutation_cluster_1samp_test
-# from statsmodels.stats.multitest import multipletests
+from mne.stats import permutation_cluster_1samp_test
+from statsmodels.stats.multitest import multipletests
 import math
 # import statsmodels.api as sm
 # import statsmodels.formula.api as smf
@@ -59,7 +59,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def main():
-    db = Database(db_path=BASE_DIR / 'database' / 'db.sqlite3')
+    db = Database(db_path=BASE_DIR / 'database' / 'old_db.sqlite3')
     prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()
@@ -76,21 +76,21 @@ def main():
     # politics_t_plot_dfs = [df[0] for df in politics_t_dfs]
     # politics_t_model_dfs = [df[1] for df in politics_t_dfs]
 
-    # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
+    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
     # survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
 
-    desc = stats.get_descriptives(dfs)
-    # stats.get_civility(civility_dfs)
+    # desc = stats.get_descriptives(dfs)
+    stats.get_civility(civility_dfs)
     # stats.get_survival(survival_dfs)
     # stats.get_timeseries(politics_t_model_dfs)
     stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_plot_dfs) 
-    # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
     # km_plot: plt.Figure = graphs.create_km_graph(survival_dfs)
  
     # graphs.get_graph_report(pol_graph)
-    # graphs.export_png(civility_plot)
+    graphs.export_png(civility_plot)
 
     # data.extract_duration()
 
@@ -324,32 +324,30 @@ class Statistics:
     def get_descriptives(self, timeSeriesDfs) -> dict[str, dict[str, float]]:
         df: pd.DataFrame = timeSeriesDfs[0].copy()
 
-        # df['news_politics'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-        # df['videos_with_transcript'] = (df['ll3_topic_single_pred'].notna()).astype(int)
-        # for sent in ['Positive', 'Negative', 'Neutral']:
-            # df[sent] = (df['ll3_sent_cat_pred'] == sent).astype(int)
+        df['news_politics'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
+        df['videos_with_transcript'] = (df['ll3_topic_single_pred'].notna()).astype(int)
+        for sent in ['Positive', 'Negative', 'Neutral']:
+            df[sent] = (df['ll3_sent_cat_pred'] == sent).astype(int)
 
-        df['date_ymd'] = pd.to_datetime(df['date_ymd'])
         per_user_num: pd.DataFrame = df.groupby('user_id').agg(
-            # avg_intolerance=('intolerance', 'mean'),
-            # avg_impoliteness=('impoliteness', 'mean'),
+            avg_intolerance=('intolerance', 'mean'),
+            avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
-            dates=('date_ymd', lambda x: (x.max() - x.min()).days),
-            # n_unique_videos=('video_id', 'nunique'),
-            # n_videos_w_transcript=('videos_with_transcript', 'sum'),
-            # n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
-            # n_politics=('news_politics', 'sum'),
-            # Positive=('Positive', 'sum'), 
-            # Negative=('Negative', 'sum'), 
-            # Neutral=('Neutral', 'sum'), 
+            n_unique_videos=('video_id', 'nunique'),
+            n_videos_w_transcript=('videos_with_transcript', 'sum'),
+            n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
+            n_politics=('news_politics', 'sum'),
+            Positive=('Positive', 'sum'), 
+            Negative=('Negative', 'sum'), 
+            Neutral=('Neutral', 'sum'), 
 
             age=('age', 'last'),
-            political_preference=('political_preference', 'first')
+            political_preference=('political_preference', 'first'),
 
         )   
-        # per_user_num['ratio_news'] = per_user_num['n_politics'] / per_user_num['n_videos']
-        # for sent in ['Positive', 'Negative', 'Neutral']:
-            # per_user_num[f'ratio_{sent}'] = per_user_num[sent] / per_user_num['n_videos']
+        per_user_num['ratio_news'] = per_user_num['n_politics'] / per_user_num['n_videos']
+        for sent in ['Positive', 'Negative', 'Neutral']:
+            per_user_num[f'ratio_{sent}'] = per_user_num[sent] / per_user_num['n_videos']
 
         per_user_cat: pd.DataFrame = df.groupby('user_id').agg(gender=('gender', 'first'), education=('education', 'first'))
  
@@ -412,7 +410,7 @@ class Statistics:
             p_values['impoliteness'].append(imp_results.pvalue)
 
             d_values['intolerance'].append(int_results.statistic *  np.sqrt(1 / len(df.loc[df['official'] == 1, 'avg_intolerance']) + 1 / len(df.loc[df['official'] == 2, 'avg_intolerance'])))
-            d_values['impoliteness'].append(imp_results.statistic *  np.sqrt(1 / len(df.loc[df['official'] == 1, 'avg_impoliteness']) +  1 / len(df.loc[df['official'] == 2, 'avg_impoliteness'])))
+            d_values['impoliteness'].append(imp_results.statistic *  np.sqrt(1 / len(df.loc[df['official'] == 1, 'avg_impoliteness']) + 1 / len(df.loc[df['official'] == 2, 'avg_impoliteness'])))
 
             t_values['intolerance'].append(int_results.statistic)
             t_values['impoliteness'].append(imp_results.statistic)
@@ -458,8 +456,8 @@ class DataExtract:
         self.base_dir = base_dir
 
     def request_time_series(self, channelOrdering: bool=False, get_qs: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
-        # classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
-                                                                    # colNames=['video_id', 'll3_topic_single_pred', 'translation', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
+        classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
+                                                                    colNames=['video_id', 'll3_topic_single_pred', 'translation', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
                                                          colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
 
@@ -471,16 +469,17 @@ class DataExtract:
         channels['official'] = np.select([channels['unique_id'].isin(official), channels['unique_id'].isin(unofficial)], [1, 2], default=0)
 
         timeSeriesDf: pd.DataFrame = self.format_time(dates)
-        timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(videos, on='video_id', how='left') \
+        timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(classifications, on='video_id', how='left') \
+            .merge(videos, on='video_id', how='left') \
             .merge(channels, on='author_id', how='left')
 
         if get_qs:
             qs: pd.DataFrame = self.database.retrieve_data(tableName='questionnaires', colNames=['name', 'age', 'gender', 'education', 'political_preference'])
             users: pd.DataFrame = self.database.retrieve_data(tableName='users', colNames=['id AS user_id', 'name']).merge(qs, on='name', how='inner')
             timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(users, on='user_id', how='inner').drop(columns=['name']) 
-            # timeSeriesDf = self.rollback_age(timeSeriesDf)
+            timeSeriesDf = self.rollback_age(timeSeriesDf)
         
-        # timeSeriesDf = timeSeriesDf[timeSeriesDf['ll3_topic_single_pred'].notna()].copy()
+        timeSeriesDf = timeSeriesDf[timeSeriesDf['ll3_topic_single_pred'].notna()].copy()
 
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
         if channelOrdering: 

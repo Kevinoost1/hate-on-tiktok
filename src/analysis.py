@@ -5,6 +5,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import json
 import seaborn as sns
 import scipy.stats as stats
@@ -65,30 +66,31 @@ def main():
     stats = Statistics()
 
     dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
-    event_df, baseline_df = prep.preprocess_epochs(dfs[0])
-    stats.eeg_analysis(event_df, baseline_df)
+    # event_df, baseline_df = prep.preprocess_epochs(dfs[0])
+    # stats.eeg_analysis(event_df, baseline_df)
 
-    graphs.create_timeseries_graph(dfs[0])
+    # pol_graph = graphs.create_timeseries_graph(dfs[0])
 
     
     # politics_t_dfs: list[pd.DataFrame] = [prep.construct_politics_t(df) for df in dfs]
     # politics_t_plot_dfs = [df[0] for df in politics_t_dfs]
     # politics_t_model_dfs = [df[1] for df in politics_t_dfs]
 
-    # civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
+    civility_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_civility(df) for df in dfs]
     # survival_dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = [prep.construct_survival(df) for df in dfs]   
 
     # desc = stats.get_descriptives(dfs)
-    # stats.get_civility(civility_dfs)
+    stats.get_civility(civility_dfs)
     # stats.get_survival(survival_dfs)
     # stats.get_timeseries(politics_t_model_dfs)
     stats.dump_to_json()
 
     # politics_t_plot: plt.Figure = graphs.create_timeseries_graph(politics_t_plot_dfs) 
-    # civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
+    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
     # km_plot: plt.Figure = graphs.create_km_graph(survival_dfs)
  
-    # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
+    # graphs.get_graph_report(pol_graph)
+    graphs.export_png(civility_plot)
 
     # data.extract_duration()
 
@@ -144,16 +146,18 @@ class PrepareData():
         return event_df, baseline
 
 
-    def construct_civility(self, timeSeriesDf: pd.DataFrame, topicColumnName:str='ll3_topic_single_pred', intoleranceColumnName: str='intolerance', impolitenessColumnName: str='impoliteness') -> pd.DataFrame:
-        print('it reached civility')
-        df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'official', topicColumnName, intoleranceColumnName, impolitenessColumnName]]
-        df: pd.DataFrame = df[df[topicColumnName] == 'Politics & Social Issues']
- 
-        results: pd.DataFrame = (df.groupby(['user_id', 'official'], as_index=False).agg(
-            avg_impoliteness=(impolitenessColumnName, 'mean'),
-            avg_intolerance=(intoleranceColumnName, 'mean')
+    def construct_civility(self, timeSeriesDf: pd.DataFrame):
+        df = timeSeriesDf.copy()[['user_id', 'unique_id', 'official', 'll3_topic_single_pred', 'intolerance', 'impoliteness']]
+        
+        df = df[(df['ll3_topic_single_pred'] == 'Politics & Social Issues') & (df['official'] != 0)]
+        
+        results = (df.groupby(['unique_id', 'official'], as_index=False). agg(
+            avg_impoliteness=('impoliteness', 'mean'),
+            avg_intolerance=('intolerance', 'mean')
         ))
+        results['official'] = results['official'].astype(int)
         return results
+
 
     def construct_survival(self, timeSeriesDf: pd.DataFrame, topicColumnName:str= 'll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred', cutoff: int=3) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()[[topicColumnName, sentColumnName, 'watch_time_s', 'age']].assign(event=1)
@@ -210,54 +214,60 @@ class Graphs():
         df = timeSeriesDf.copy()
 
         df['is_news'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-        per_user = df.groupby(['user_id', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count')).reset_index()
+        df['high_int'] = (df['intolerance'] >= 5).astype(int)
+
+        per_user = df.groupby(['user_id', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_high_int=('high_int', 'sum')).reset_index()
         per_user['ratio'] = per_user['n_news'] / per_user['n_total']
+        per_user['int_ratio'] = per_user['n_high_int'] / per_user['n_news']
 
         grand_avg = per_user.groupby('date_ymd').agg(mean_ratio=('ratio', 'mean'), sem_ratio=('ratio', lambda x: x.std() / np.sqrt(len(x))), 
-                                                    n_users=('user_id', 'nunique'), n_videos=('n_total', 'sum')).reset_index()
-
-        # RD: just for plotting we use a weighted mean to display the grand average (individual points are non-weighted)
-        w = per_user.groupby('date_ymd').apply(lambda x: np.average(x['ratio'], weights=x['n_total'])).rename('w_ratio').reset_index()
-        grand_avg = grand_avg.merge(w, on='date_ymd', how='left')
+                                                    n_users=('user_id', 'nunique'), n_videos=('n_total', 'sum'), 
+                                                     mean_int_ratio=('int_ratio', 'mean'), sem_int_ratio=('int_ratio', lambda x: x.std() / np.sqrt(len(x)))).reset_index()
  
         transp = (grand_avg['n_users'] - grand_avg['n_users'].min()) / (grand_avg['n_users'].max() - grand_avg['n_users'].min())
         transp = transp.fillna(0.1)
 
-        fig, axes = plt.subplots(3, 1, sharex=True, gridspec_kw={'height_ratios': [3, 1, 1]})
+        fig, axes = plt.subplots(4, 1, sharex=True, figsize=(30, 20), gridspec_kw={'height_ratios': [2, 2, 1, 1]})
         for i, row in grand_avg.iterrows():
             axes[0].scatter(row['date_ymd'], row['mean_ratio'], color=self.colors['dark_blue'], alpha=transp.iloc[i], s=15)
+            axes[1].scatter(row['date_ymd'], row['mean_int_ratio'], color=self.colors['purple'], alpha=transp.iloc[i], s=15)
 
-        assert not (row['n_videos'] > 0 and row['n_users'] == 0)
+            assert not (row['n_videos'] > 0 and row['n_users'] == 0)
 
-        axes[0].plot(grand_avg['date_ymd'], grand_avg['mean_ratio'], color=self.colors['dark_blue'], linewidth=2.5, label='weighted average')
+        axes[0].plot(grand_avg['date_ymd'], grand_avg['mean_ratio'], color=self.colors['dark_blue'], linewidth=2.5)
         axes[0].fill_between(grand_avg['date_ymd'], grand_avg['mean_ratio'] - grand_avg['sem_ratio'], grand_avg['mean_ratio'] + grand_avg['sem_ratio'], color=self.colors['dark_blue'], alpha=0.15)
+        axes[1].plot(grand_avg['date_ymd'], grand_avg['mean_int_ratio'], color=self.colors['purple'], linewidth=2.5)
+        axes[1].fill_between(grand_avg['date_ymd'], grand_avg['mean_int_ratio'] - grand_avg['sem_int_ratio'], grand_avg['mean_int_ratio'] + grand_avg['sem_int_ratio'], color=self.colors['purple'], alpha=0.15)
 
+        legend = []
         for label, date in self.political_events.items():
-            axes[0].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
-            axes[0].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
-            axes[1].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
-            axes[1].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
-            axes[2].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
-            axes[2].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
+            for i, plot in enumerate(axes):
+                axes[i].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
+                axes[i].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
 
-        axes[0].set_ylabel('Ratio News in Feed')
-        axes[0].set_title("Exposure to News, Politics & Societal Issues Content over Time")
-        axes[0].legend(frameon=False)
+            legend.append(Line2D([0], [0], color=self.colors['green'], linestyle='--', label=label))
+
+        axes[0].set_ylabel('Ratio News in Feed', fontsize=22)
+        axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time", fontsize=28)
+        axes[0].legend(handles=legend, fontsize=11, frameon=False, loc='upper left')
         axes[0].set_xlim(pd.to_datetime('2023-09-01'), pd.to_datetime('2025-02-01'))
-        axes[0].set_ylim(grand_avg['sem_ratio'].min(), grand_avg['sem_ratio'].max())
+        axes[0].set_ylim(0, 0.3)
 
-        axes[1].plot(grand_avg['date_ymd'], grand_avg['n_videos'], color=self.colors['brown'], linewidth=1.5, label='Number of Videos')
-        axes[1].set_ylabel('Number of Videos')
-        axes[1].legend(frameon=False)
+        axes[1].set_ylabel('Ratio High Intolerance\nNews in Feed', fontsize=22)
+        axes[1].set_ylim(0, 0.3)
 
-        axes[2].plot(grand_avg['date_ymd'], grand_avg['n_users'], color=self.colors['orange'], alpha=0.5, label='Number of Participants')
-        axes[2].set_ylabel('Number of Participants')
-        axes[2].legend(frameon=False)
+        axes[2].plot(grand_avg['date_ymd'], grand_avg['n_videos'], color=self.colors['brown'], linewidth=1.5, label='Number of Videos')
+        axes[2].set_ylabel('Number of\nVideos', fontsize=22)
+
+        axes[3].plot(grand_avg['date_ymd'], grand_avg['n_users'], color=self.colors['orange'], alpha=0.5, label='Number of Participants')
+        axes[3].set_ylabel('Number of\nParticipants', fontsize=22)
+
+        for ax in axes:
+            ax.tick_params(axis='both', labelsize=20)
 
         plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
 
+        return fig
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]):
         results = dfs
@@ -268,7 +278,7 @@ class Graphs():
             sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[1])
         
         combined = pd.concat(results, ignore_index=True)
-        avg_over_definitions = combined.groupby(['user_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))
+        avg_over_definitions = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))
 
         sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
         sns.stripplot(data=avg_over_definitions, x="official", y="avg_impoliteness", jitter=0.2, alpha=0.2, ax=axes[0], size=3, color=self.colors['dark_blue'])
@@ -276,22 +286,27 @@ class Graphs():
         sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
         sns.stripplot(data=avg_over_definitions, x="official", y="avg_intolerance", jitter=0.2, alpha=0.2, ax=axes[1], size=3, color=self.colors['dark_blue'])
 
-
         axes[0].set_ylabel("Average Impoliteness")
         axes[0].set_title("Average Civility per Channel Type")
         axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
 
         axes[1].set_ylabel("Average Intolerance")
-        axes[1].set_xticklabels(["Unofficial","Official"])
+        axes[1].set_xticklabels(["Official", "Unofficial"])
         axes[1].set_xlabel("")
         axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
 
         return fig
 
+
+
     def get_graph_report(self, *figs: tuple[plt.Figure, ...]) -> None:
         with PdfPages('graphs.pdf') as pdf:
             for fig in figs:
                 pdf.savefig(fig) 
+
+    def export_png(self,  *figs: tuple[plt.Figure, ...]) -> None:
+        for i, fig in enumerate(figs):
+            fig.savefig(f'plots/{i}.png', dpi=300)
 
 class Statistics:
     def __init__(self, outputName: str='stats.json'):
@@ -385,19 +400,17 @@ class Statistics:
         results = {'p_values': p_values, 't_values': t_values, 'd_values': d_values, 'd_mean': {}, 'd_sd': {}, 'd_range': {}, 'p_range': {}}
 
         for df in dfs:
-            paired: pd.DataFrame = df.pivot(index='user_id', columns='official', values=['avg_intolerance', 'avg_impoliteness'])
+        
+            # paired = paired.dropna()
 
-            # RD: Some people had NaN (likely to little videos from 'official')       # TO DO: remember what was up with these people
-            paired = paired.dropna()
-
-            int_results = stats.ttest_rel(paired['avg_intolerance'][1], paired['avg_intolerance'][0], alternative='less') 
-            imp_results = stats.ttest_rel(paired['avg_impoliteness'][1], paired['avg_impoliteness'][0], alternative='less')
+            int_results = stats.ttest_ind(df.loc[df['official'] == 1, 'avg_intolerance'], df.loc[df['official'] == 2, 'avg_intolerance'], alternative='less') 
+            imp_results = stats.ttest_ind(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness'], alternative='less') 
 
             p_values['intolerance'].append(int_results.pvalue)
             p_values['impoliteness'].append(imp_results.pvalue)
 
-            d_values['intolerance'].append(int_results.statistic / np.sqrt(len(paired['avg_intolerance'][1])))
-            d_values['impoliteness'].append(imp_results.statistic / np.sqrt(len(paired['avg_impoliteness'][1])))
+            d_values['intolerance'].append(int_results.statistic *  np.sqrt(1 / len(df.loc[df['official'] == 1, 'avg_intolerance']) + 1 / len(df.loc[df['official'] == 2, 'avg_intolerance'])))
+            d_values['impoliteness'].append(imp_results.statistic *  np.sqrt(1 / len(df.loc[df['official'] == 1, 'avg_impoliteness']) +  1 / len(df.loc[df['official'] == 2, 'avg_impoliteness'])))
 
             t_values['intolerance'].append(int_results.statistic)
             t_values['impoliteness'].append(imp_results.statistic)
@@ -451,8 +464,9 @@ class DataExtract:
         videos = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 
         official, unofficial, ordering = self.load_channels() 
+
         channels: pd.DataFrame = self.database.retrieve_data(tableName='authors', colNames=['id AS author_id', 'unique_id'])
-        channels['official'] = channels['unique_id'].apply(lambda x: (x in official)).astype(int)
+        channels['official'] = np.select([channels['unique_id'].isin(official), channels['unique_id'].isin(unofficial)], [1, 2], default=0)
 
         timeSeriesDf: pd.DataFrame = self.format_time(dates)
         timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(classifications, on='video_id', how='left') \
@@ -466,13 +480,16 @@ class DataExtract:
             timeSeriesDf = self.rollback_age(timeSeriesDf)
         
         timeSeriesDf = timeSeriesDf[timeSeriesDf['ll3_topic_single_pred'].notna()].copy()
+
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
         if channelOrdering: 
             for n in range(len(ordering)):
                 mask = timeSeriesDf['unique_id'].isin(ordering[str(n)])
-                timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 0
-                
+                timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 2
+               
                 timeSeriesDfs.append(timeSeriesDf.copy())
+
+                assert timeSeriesDf.loc[timeSeriesDf['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 8 else 2)
 
         return timeSeriesDfs
         

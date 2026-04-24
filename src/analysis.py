@@ -9,11 +9,11 @@ from matplotlib.lines import Line2D
 import json
 import seaborn as sns
 import scipy.stats as stats
-from lifelines import KaplanMeierFitter, CoxPHFitter
+# from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 from pathlib import Path
-from mne.stats import permutation_cluster_1samp_test
-from statsmodels.stats.multitest import multipletests
+# from mne.stats import permutation_cluster_1samp_test
+# from statsmodels.stats.multitest import multipletests
 import math
 # import statsmodels.api as sm
 # import statsmodels.formula.api as smf
@@ -334,8 +334,7 @@ class Statistics:
             # avg_intolerance=('intolerance', 'mean'),
             # avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
-            min_dates=('date_ymd', 'min'),
-            max_dates=('date_ymd', 'max'),
+            dates=('date_ymd', lambda x: (x.max() - x.min()).days),
             # n_unique_videos=('video_id', 'nunique'),
             # n_videos_w_transcript=('videos_with_transcript', 'sum'),
             # n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),

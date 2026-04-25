@@ -117,8 +117,8 @@ class PrepareData():
         df: pd.DataFrame = timeSeriesDf.copy()
         df['date_ymd'] = pd.to_datetime(df['date_ymd'])
 
-        epochs: list[] | list[pd.DataFrame] = []
-        baselines: list[] | list[pd.DataFrame] = []
+        epochs: list[None] | list[pd.DataFrame] = []
+        baselines: list[None] | list[pd.DataFrame] = []
 
         for name, event in self.political_events.items():
             relative_day = (df['date_ymd'] - event).dt.days

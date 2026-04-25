@@ -415,7 +415,7 @@ class Statistics:
         for analysis_type in ['news', 'int']:
             nope, p_cor, _, _ = multipletests(p_val[analysis_type], method='holm')
 
-            for i, event in event_order:
+            for i, event in enumerate(event_order):
                 results[event][analysis_type]['significant'] = bool(nope[i])
                 results[event][analysis_type]['p_corrected'] = float(p_cor[i])
 

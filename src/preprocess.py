@@ -6,6 +6,7 @@ from torch.cuda.amp import autocast
 from collections import defaultdict
 import json
 from pathlib import Path
+from database import *
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -34,19 +35,19 @@ Depending on your setup (mainly GPU memory), you can set this higher or lower. G
 
 filter_on_heuristics() returns a dataframe with a new column 'filtered' (0 or 1)
 - It requires a pandas dataframe and the column name for the transcripts.
-- Whenever a transcript is less than 8 words or has a word diversity of less than 0.3 (unique words/total words), it has a value of 1 in filtered.
+- Whenever a transcript has less than 8 words or has a word diversity of less than 0.3 (unique words/total words), it has a value of 1 in filtered.
 These hyperparameters can off course be changed within the class
-- As with the translation, the Database() initialization should have already created an empty 'filtered' column if it did not exist yet. 
+- As with the translation, the Database() enforce_structure() method should have already created an empty 'filtered' column if it did not exist yet. 
 """
 class Preprocess:
-    def __init__(self):
-        self.device: str = 'cuda'
+    def __init__(self, device: str='cuda', translationModelName: str=BASE_DIR / 'models' / 'facebook_translator', translationBatchSize: int=16, maxWordsAllowed: int=8, maxDiversityAllowed: int=0.3):
+        self.device: str = device
 
-        self.translationModelName: str = BASE_DIR / 'models' / 'facebook_translator' 
-        self.translationBatchSize: int = 16
+        self.translationModelName: str = translationModelName
+        self.translationBatchSize: int = translationBatchSize
 
-        self.maxWordsAllowed: int = 8
-        self.maxDiversityAllowed: float = 0.3
+        self.maxWordsAllowed: int = maxWordsAllowed
+        self.maxDiversityAllowed: float = maxDiversityAllowed
 
     def preprocess_text(self, df: pd.DataFrame, subtitlesColumn:str) -> pd.DataFrame:
         df[subtitlesColumn] = df[subtitlesColumn].apply(self.match_text)
@@ -79,12 +80,12 @@ class Preprocess:
         return " ".join([p for p in parts if p]).strip()
 
     def generate_translation(self, df: pd.DataFrame, transcriptColumn:str, languageIdColumn: str) -> pd.DataFrame:
-        indexes: list[int, ...] = df.index.tolist()
-        transcripts: list[str, ...] = df[transcriptColumn].tolist()
-        language_ids: list[int, ...] = df[languageIdColumn].tolist()
+        indexes: list[int] = df.index.tolist()
+        transcripts: list[str] = df[transcriptColumn].tolist()
+        language_ids: list[int] = df[languageIdColumn].tolist()
 
-        parts: list[str, ...] = []
-        mapping: list[int, ...] = []
+        parts: list[str] = []
+        mapping: list[int] = []
 
         for i, (idx, transcript, langId) in enumerate(zip(indexes, transcripts, language_ids)):
             if langId == 18:
@@ -98,7 +99,7 @@ class Preprocess:
 
         model = MBartForConditionalGeneration.from_pretrained(self.translationModelName).to(self.device).eval()
         tokenizer = MBart50Tokenizer.from_pretrained(self.translationModelName, src_lang="nl_XX", tgt_lang="eng_XX")
-        decoded: list[None] | list[str, ...] = [None] * len(parts)
+        decoded: list[None] | list[str] = [None] * len(parts)
 
         for start in range(0, len(parts), self.translationBatchSize):
             batch: list[str] = parts[start:start + self.translationBatchSize]
@@ -149,7 +150,4 @@ class Preprocess:
         df.loc[:, 'filtered'] = ((transcriptLengths < self.maxWordsAllowed) | (wordDiversity < self.maxDiversityAllowed)).astype(int)
 
         return df
-
-
-
 

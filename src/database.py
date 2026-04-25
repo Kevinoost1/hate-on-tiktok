@@ -14,9 +14,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 In main.py you can find an example use for the entire analysis pipeline
 
 *Contains all database methods used for the pipeline*
-    - If you cloned the program, it will automatically set your working directory to the folder above 'src'.
+    - If you cloned the repo, it will automatically set your working directory to the folder above 'src'.
     You can then add, e.g., a folder 'database' to store your .sqlite3 file. 
-    If your structure is different, you can adjust the global BASE_DIR variable, or the __init__ method.
+    If your structure is different, you can adjust the global BASE_DIR variable, or pass a custom path when initializing the class.
 
 It contains the following general methods:
 
@@ -88,7 +88,7 @@ class Database:
 
     def update_data(self, tableName: str, data: pd.DataFrame, idColumnName: str = 'id') -> None:
         cols_to_update = [col for col in data.columns if col != idColumnName]
-        cols = ", ".join(f"{col} = ?" for col in cols_to_update)
+        cols: str = ", ".join(f"{col} = ?" for col in cols_to_update)
         
         values = [
             tuple(row[col] for col in cols_to_update) + (int(row[idColumnName]),)

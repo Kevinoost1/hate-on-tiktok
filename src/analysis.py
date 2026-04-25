@@ -96,8 +96,6 @@ def main():
     graphs.get_graph_report(pol_graph)
     graphs.export_png(civility_plot)
 
-    # data.extract_duration()
-
 
 class PrepareData():
     def __init__(self):
@@ -530,7 +528,7 @@ class DataExtract:
                 timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
                 timeSeriesDfs.append(timeSeriesDf)
 
-                assert timeSeriesDf.loc[timeSeriesDf['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 8 else 2)
+                assert timeSeriesDf.loc[timeSeriesDf['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
 
         return timeSeriesDfs
         

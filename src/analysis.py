@@ -523,10 +523,8 @@ class DataExtract:
 
         if channelOrdering: 
             for n in range(len(ordering)):
-                mask = timeSeriesDf['unique_id'].isin(ordering[str(n)])
-
                 timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
-                timeSeriesDfs.append(timeSeriesDf)
+                timeSeriesDfs.append(timeSeriesDf.copy())
 
                 assert timeSeriesDf.loc[timeSeriesDf['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
 

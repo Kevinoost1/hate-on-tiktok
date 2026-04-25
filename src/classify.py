@@ -25,6 +25,7 @@ def transcripts_to_txt(df: pd.DataFrame, transcriptColumn: str='translation', de
         for t, d in zip(df[transcriptColumn], df[descriptionColumn]):
             t_clean = str(t).replace('\n', ' ').replace('\r', ' ')
             d_clean = str(d).replace('\n', ' ').replace('\r', ' ')
+
             f.write(t_clean + ' ' + d_clean + '\n')    
 
     id_df: pd.DataFrame = df[[mergeTargetName]]

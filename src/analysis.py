@@ -83,7 +83,7 @@ def main():
     desc = stats.get_descriptives(dfs)
     stats.get_civility(civility_dfs)
     stats.get_survival(survival_dfs)
-    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[1])
+    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
     stats.dump_to_json()
 
     """
@@ -125,13 +125,13 @@ class PrepareData():
             relative_day = (df['date_ymd'] - event).dt.days
             in_window = relative_day.between(-pre_window, post_window)
 
-            temp: pd.DataFrame = df.loc[(in_window)]
+            temp: pd.DataFrame = df.loc[(in_window)].copy()
             temp['event'] = name
             temp['relative_day'] = relative_day[in_window]
             epochs.append(temp)
 
             in_baseline_window = relative_day.between(-non_event_window, -pre_window - 1)
-            temp_base: pd.DataFrame = df.loc[in_baseline_window]
+            temp_base: pd.DataFrame = df.loc[in_baseline_window].copy()
             temp_base['event'] = name
             temp_base['relative_day'] = relative_day[in_baseline_window]
             baselines.append(temp_base)
@@ -299,10 +299,8 @@ class Graphs():
         avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))
 
         sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
-        sns.stripplot(data=avg_over_definitions, x="official", y="avg_impoliteness", jitter=0.2, alpha=0.2, ax=axes[0], size=3, color=self.colors['dark_blue'])
 
         sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
-        sns.stripplot(data=avg_over_definitions, x="official", y="avg_intolerance", jitter=0.2, alpha=0.2, ax=axes[1], size=3, color=self.colors['dark_blue'])
 
         axes[0].set_ylabel("Average Impoliteness")
         axes[0].set_title("Average Civility per Channel Type")
@@ -350,7 +348,7 @@ class Statistics:
             avg_intolerance=('intolerance', 'mean'),
             avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
-            dates=('date_ymd', lambda x: x.dt.day.max() - x.dt.day.min()),
+            dates=('date_ymd', lambda x: (x.max() - x.min()).days(),
             n_unique_videos=('video_id', 'nunique'),
             n_videos_w_transcript=('videos_with_transcript', 'sum'),
             n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
@@ -443,8 +441,15 @@ class Statistics:
             p_values['intolerance'].append(int_results.pvalue)
             p_values['impoliteness'].append(imp_results.pvalue)
 
-            d_values['intolerance'].append(int_results.statistic *  np.sqrt(1 / len(df.loc[df['official'] == 1, 'avg_intolerance']) + 1 / len(df.loc[df['official'] == 2, 'avg_intolerance'])))
-            d_values['impoliteness'].append(imp_results.statistic *  np.sqrt(1 / len(df.loc[df['official'] == 1, 'avg_impoliteness']) + 1 / len(df.loc[df['official'] == 2, 'avg_impoliteness'])))
+            def cohens_d(official, unofficial):
+                n_official, n_unofficial = len(official), len(unofficial)
+                var_official, var_unofficial = official.var(), unofficial.var()
+
+                pooled_sd = np.sqrt(((n_official - 1) * var_official + (n_unofficial - 1) * var_unofficial) / (n_official + n_unofficial - 2))
+                return (official.mean() - unofficial.mean()) / pooled_sd
+
+            d_values['intolerance'].append(cohens_d(df.loc[df['official'] == 1, 'avg_intolerance'], df.loc[df['official'] == 2, 'avg_intolerance']))
+            d_values['impoliteness'].append(cohens_d(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness']))
 
             t_values['intolerance'].append(int_results.statistic)
             t_values['impoliteness'].append(imp_results.statistic)
@@ -468,10 +473,12 @@ class Statistics:
     def get_survival(self, survival_dfs: pd.DataFrame):
         df = survival_dfs[0][['ll3_topic_single_pred', 'll3_sent_cat_pred', 'event', 'watch_time_s']].copy()
 
-        # RD: Using Other and Neutral as references
         df['ll3_topic_single_pred'] = pd.Categorical(df['ll3_topic_single_pred'], categories=['Other', 'Politics & Social Issues'])
         df['ll3_sent_cat_pred'] = pd.Categorical(df['ll3_sent_cat_pred'], categories=['Neutral', 'Negative', 'Positive'])
-        df = pd.get_dummies(df, columns=['ll3_topic_single_pred', 'll3_sent_cat_pred'], drop_first=True)
+        df = pd.get_dummies(df, columns=['ll3_topic_single_pred', 'll3_sent_cat_pred'], drop_first=False)
+
+        # RD: Using Other and Neutral as references
+        df = df.drop(columns=['ll3_topic_single_pred_Other','ll3_sent_cat_pred_Neutral'])
 
         cph = CoxPHFitter()
         cph.fit(df, duration_col='watch_time_s', event_col='event')
@@ -523,8 +530,9 @@ class DataExtract:
 
         if channelOrdering: 
             for n in range(len(ordering)):
-                timeSeriesDf.loc[timeSeriesDf['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
-                timeSeriesDfs.append(timeSeriesDf.copy())
+                def_df = timeSeriesDf.copy() 
+                def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
+                timeSeriesDfs.append(def_df)
 
                 assert timeSeriesDf.loc[timeSeriesDf['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
 

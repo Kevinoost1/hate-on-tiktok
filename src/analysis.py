@@ -13,6 +13,7 @@ from lifelines import KaplanMeierFitter, CoxPHFitter
 import zstandard as zstd
 from pathlib import Path
 from mne.stats import permutation_cluster_1samp_test
+from statsmodels.stats.multitest import multipletests
 import math
 
 
@@ -64,7 +65,7 @@ def main():
     graphs = Graphs()
     stats = Statistics()
 
-    dfs: list[pd.DataFrame] | list[pd.DataFrame, ...] = data.request_time_series(get_qs=True, channelOrdering=False)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=True)
     
     """
     Preprocess for each analysis
@@ -72,6 +73,7 @@ def main():
     politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
     politics_t_event_dfs = [df[0] for df in politics_t_dfs]
     politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
+
     civility_dfs: list[pd.DataFrame] = [prep.construct_civility(df) for df in dfs]
     survival_dfs: list[pd.DataFrame] = [prep.construct_survival(df) for df in dfs]   
 
@@ -90,6 +92,7 @@ def main():
     politics_t_plot: plt.Figure = graphs.create_timeseries_graph(dfs) 
     civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
     km_plot: plt.Figure = graphs.create_km_graph(survival_dfs) 
+
     graphs.get_graph_report(pol_graph)
     graphs.export_png(civility_plot)
 
@@ -349,6 +352,7 @@ class Statistics:
             avg_intolerance=('intolerance', 'mean'),
             avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
+            dates=('date_ymd', lambda x: x.dt.day.max() - x.dt.day.min()),
             n_unique_videos=('video_id', 'nunique'),
             n_videos_w_transcript=('videos_with_transcript', 'sum'),
             n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
@@ -378,6 +382,7 @@ class Statistics:
 
     """
     Cluster permutation t-test
+    -> Bonferoni-Holm correction at then end
     """ 
     def get_timeseries(self, politics_t_event_df, politics_t_baseline_df): 
         results = {}
@@ -385,8 +390,11 @@ class Statistics:
         df = politics_t_event_df.merge(politics_t_baseline_df, on=['user_id', 'event'], how='inner')
         df['c_news_ratio'] = df['ratio'] - df['baseline_ratio']
         df['c_int_ratio'] = df['int_ratio'] - df['baseline_int_ratio']
+        p_val = {'news': [], 'int': []}
 
-        for event in df['event'].unique():
+        event_order = df['event'].unique()
+
+        for event in event_order:
             local_results = {}
 
             for analysis_type, col in {'news': 'c_news_ratio', 'int': 'c_int_ratio'}.items():
@@ -397,12 +405,21 @@ class Statistics:
                         
                 x = df_event.values
                 t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
+
+                p_val[analysis_type].append(np.min(p) if len(p) > 0 else 1)
                 
                 timepoints = df_event.columns.values
                 local_results[analysis_type] = {'t': t.tolist(), 
                                                 'clusters': [{'start_day': int(timepoints[c[0].start]), 'end_day': int(timepoints[c[0].stop - 1])} for c in clusters], 
                                                 'p': p.tolist()}
             results[event] = local_results
+
+        for analysis_type in ['news', 'int']:
+            nope, p_cor, _, _ = multipletests(p_val[analysis_type], method='holm')
+
+            for i, event in event_order.unique():
+                results[event][analysis_type]['significant'] = bool(nope[i])
+                results[event][analysis_type]['p_corrected'] = float(p_cor[i])
 
         self.jsonContent['Timeseries'].append(results)
         return results

@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.metrics import roc_curve, roc_auc_score, classification_report
+from sklearn.metrics import roc_curve, roc_auc_score, classification_report, root_mean_squared_error
 from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import matplotlib
@@ -19,11 +19,13 @@ The two main metrics used for both testing and validating are:
 
 plot_roc(): ROC plots (with AUC) are given per class, with seperate lines for each validation results dataframe (to compare).
     - NOTE: the if-statement in this function represents a distinction between binary classification and multi-class classification
-      Due to a mistake at the start of this process, I only retrieved the 'prob' column from the results_df, which only contains the majority class probability.
+      Due to a mistake at the start of this process, I only retrieved the 'prob' column from the early validations' results_df, which only contains the majority class probability.
       In order to keep comparing validation attempts with the earliest runs, without requiring a rerun, I made a (sort of messy) if-statement to fix it.
       However, if you retrieve the 'probs' column from ChoiceLlm the else clause should work for both binary and multi-class classification, making the conditional obsolete.
 
 get_classification_report(): calculates krippendoffs alpha and metrics, such as F1 score and dumps them into a .json matching the specific classification
+    - for intolerance and impolitness, RMSE and interval Krippendorffs alpha metrics are calculated instead. 
+      In case your classification types are different, but also on a likert scale, you can adjust the names in the list for this function. 
 
 perform_validation(): a helper function that calls all the validation methods for a given classification type for each itteration of the prompt. 
 """
@@ -45,6 +47,7 @@ class Validation:
         for classIdx, label in enumerate(self.posLabels):
             ax = axes[classIdx]
             for dfIdx, df in enumerate(self.validationDfs):
+
                 y_true = (df[yTrueColumnName].apply(lambda x: x.strip()) ==  label).astype(int)
 
                 if self.classificationType == 'topic':
@@ -54,6 +57,7 @@ class Validation:
                     y_scores_df.columns = self.posLabels
                     y_scores = y_scores_df[label].values
                     
+
                 fpr, tpr, thresholds = roc_curve(y_true, y_scores)
                 auc = roc_auc_score(y_true, y_scores)
 
@@ -73,11 +77,13 @@ class Validation:
             df[yTrueColumnName] = df[yTrueColumnName].apply(lambda x: str(x).strip())
             df[yPredColumnName] = df[yPredColumnName].apply(lambda x: str(x).strip())
 
-            if self.classificationType in ['impoliteness', 'intolerance']:
-                kripp_data = np.array([df[yTrueColumnName].astype(float), df[yPredColumnName].astype(float)])
+            if self.classificationType in ['impoliteness', 'intolerance', 'intolerance_test', 'impoliteness_test']:
+                rmse = root_mean_squared_error(df[yTrueColumnName], df[yPredColumnName])
+                kripp_data = np.array([np.round(df[yTrueColumnName].astype(float), 0), np.round(df[yPredColumnName].astype(float), 0)])
                 alpha = krippendorff.alpha(reliability_data=kripp_data, level_of_measurement='ordinal')
 
-                reports[i] = {'classification_report': [], 'krippendorff_alpha': alpha}
+                reports[i] = {'rmse': rmse, 'krippendorff_alpha': alpha}
+
             else:
                 class_report = classification_report(df[yTrueColumnName], df[yPredColumnName], target_names=self.posLabels, output_dict=True) 
 
@@ -93,6 +99,7 @@ class Validation:
 
         return reports
 
+
 def perform_validation(variant_names: list[str, ...], classificationType='topic', ground_truth_name: str='val.csv', manual_label_name: str='manual_topic', 
                        posLabels=['News, Politics & Societal Issues', 'Other']):
 
@@ -103,29 +110,57 @@ def perform_validation(variant_names: list[str, ...], classificationType='topic'
         df = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{v}")
 
         if classificationType == 'sent':
-            merged_dfs.append(ground_truth.merge(df, on='video_id', how='left').iloc[:150, :])
+            merged_dfs.append(ground_truth.merge(df, on='video_id', how='inner').iloc[:150, :])
         else:
-            merged_dfs.append(ground_truth.merge(df, on='video_id', how='left')) 
+            merged_dfs.append(ground_truth.merge(df, on='video_id', how='inner'))
 
     val = Validation(merged_dfs, classificationType=classificationType, posLabels=posLabels)
-    if classificationType not in ['impoliteness', 'intolerance']:
+    if classificationType not in ['impoliteness', 'intolerance', 'topic', 'intolerance_test', 'impoliteness_test']:
         val.plot_roc(manual_label_name)
         
     val.get_classification_report(yTrueColumnName=manual_label_name, yPredColumnName='pred')
 
+
+
+
 if __name__ == '__main__':
+
     perform_validation(variant_names=['val_sent_variant1.csv', 'val_sent_variant2.csv',
-                        'val_sent_variant3.csv', 'val_sent_variant4.csv', 'val_sent_variant5.csv'], classificationType='sent', 
+                        'val_sent_variant3.csv', 'val_sent_variant4.csv', 'val_sent_variant5.csv'], classificationType='sent', ground_truth_name='finished_valsets/val.csv', 
                        manual_label_name='manual_sent', posLabels=['Negative', 'Neutral', 'Positive'])
 
     perform_validation(variant_names=['val_variant2.csv', 'val_variant3.csv', 'val_variant4.csv', 'val_variant5.csv',
                          'val_variant6.csv', 'val_variant7.csv', 'val_variant8.csv', 'val_variant9.csv',
-                         'val_variant10.csv', 'val_variant11.csv'])
+                         'val_variant10.csv', 'val_variant11.csv'], ground_truth_name='finished_valsets/val.csv')
 
-    perform_validation(variant_names=['val_sub_variant0.csv', 'val_sub_variant1.csv'], classificationType='subtopic', ground_truth_name='sub.csv', 
+    perform_validation(variant_names=['val_sub_variant0.csv', 'val_sub_variant1.csv'], classificationType='subtopic', ground_truth_name='finished_valsets/sub.csv', 
                        manual_label_name='manual_subtopic', posLabels=['Political Systems', 'Discrimination', 'Migration',
                                                                        'Climate', 'Economy & International Relations', 'War & Conflict', 
                                                                        'Crime', 'Health', 'Digital Media & AI', 'Education', 'Social Policy & Employment', 'Other'])
 
-    perform_validation(variant_names=['val_int_variant0.csv'], classificationType='intolerance', ground_truth_name='val_int.csv', manual_label_name='manual_intolerance')
+    perform_validation(variant_names=['val_int_variant0.csv', 'val_int_variant1.csv'], classificationType='intolerance', ground_truth_name='finished_valsets/val_int.csv', manual_label_name='manual_intolerance')
+
+
+    perform_validation(variant_names=['sub_test_results.csv'], classificationType='subtopic_test', ground_truth_name='finished_testsets/testset_sub.csv', 
+    manual_label_name='manual_subtopic', posLabels=['Political Systems', 'Discrimination', 'Migration',
+    'Climate', 'Economy & International Relations', 'War & Conflict', 
+    'Crime', 'Health', 'Digital Media & AI', 'Education', 'Social Policy & Employment', 'Other'])
+
+
+    perform_validation(variant_names=['sent_test_results.csv'], classificationType='sent_test', ground_truth_name='finished_testsets/testset_sent.csv', 
+    manual_label_name='manual_sent', posLabels=['Negative', 'Neutral', 'Positive'])
+
+
+    perform_validation(variant_names=['int_test_results.csv'], classificationType='intolerance_test', ground_truth_name='finished_testsets/testset_int.csv', manual_label_name='manual_intolerance')
+
+
+    perform_validation(variant_names=['imp_test_results.csv'], classificationType='impoliteness_test', ground_truth_name='finished_testsets/testset_imp.csv', manual_label_name='manual_impoliteness')
+
+
+
+
+
+
+
+
 

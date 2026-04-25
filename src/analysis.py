@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from database import *
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D

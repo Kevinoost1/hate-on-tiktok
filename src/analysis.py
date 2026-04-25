@@ -83,7 +83,7 @@ def main():
     desc = stats.get_descriptives(dfs)
     stats.get_civility(civility_dfs)
     stats.get_survival(survival_dfs)
-    stats.get_timeseries(politics_t_event_dfs[0], political_t_baseline_dfs[1])
+    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[1])
     stats.dump_to_json()
 
     """

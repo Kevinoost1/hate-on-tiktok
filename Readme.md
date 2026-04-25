@@ -30,7 +30,7 @@ You can off course also adapt the code to your own databases' structure.
 **Initialize the class Preprocess()**
 
 It does not require any arguments, but initializes a path for the translation model within models/. It is advised to change this path if your structure differs
-Within init() 
+within init() 
 
 You can also find some hyperparameters for the filtering and the translation batches. You can change these values as you please by inputting it while initializing the class in your code. 
 
@@ -42,7 +42,7 @@ This method takes a DataFrame and requires a string to indicate the column name 
 
 It will remove standard watermarks and timestamps provided by TikTok for their transcripts. Moreover, it will parse any transcripts delivered in .json format. 
 
-It returns a DataFrame with the filtered data in the original column (it overwrites the old text for the new DataFrame)
+It returns a DataFrame with the preprocessed data in the original column (it overwrites the old text for the new DataFrame)
 
 **Run Preprocess.generate_translation()**
 
@@ -111,5 +111,5 @@ All of this information is also in the paper in clearer format.
 
 As with the graphs, each of the three major analyses have a function in Statistics(). There is also a function for getting the descriptives
 
-In every case it returns the results in the form of a dictionnairy. However, running the dump_to_json() function just takes all of these dictionnaires, puts them with their right analysis and saves a 'stats.json' with every single important output. So you can just run every analysis once and check out the results in one file.
+In every case it returns the results in the form of a dictionary. However, running the dump_to_json() function just takes all of these dictionaries, puts them with their right analysis and saves a 'stats.json' with every single important output. So you can just run every analysis once and check out the results in one file.
 

@@ -376,9 +376,9 @@ class Statistics:
 
         return descriptives
 
-   """
+    """
     Cluster permutation t-test
-   """ 
+    """ 
     def get_timeseries(self, politics_t_event_df, politics_t_baseline_df): 
         results = {}
 

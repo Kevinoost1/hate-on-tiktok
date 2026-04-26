@@ -338,6 +338,7 @@ class Statistics:
         
     def get_descriptives(self, timeSeriesDfs) -> dict[str, dict[str, float]]:
         df: pd.DataFrame = timeSeriesDfs[0].copy()
+        df['date_ymd'] = pd.to_datetime(df['date_ymd'])
 
         df['news_politics'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
         df['videos_with_transcript'] = (df['ll3_topic_single_pred'].notna()).astype(int)

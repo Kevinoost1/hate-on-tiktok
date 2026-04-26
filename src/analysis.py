@@ -534,7 +534,7 @@ class DataExtract:
                 def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
                 timeSeriesDfs.append(def_df)
 
-                assert timeSeriesDf.loc[timeSeriesDf['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
+                assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
 
         return timeSeriesDfs
         

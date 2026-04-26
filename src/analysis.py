@@ -348,7 +348,7 @@ class Statistics:
             avg_intolerance=('intolerance', 'mean'),
             avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
-            dates=('date_ymd', lambda x: (x.max() - x.min()).days(),
+            dates=('date_ymd', lambda x: (x.max() - x.min()).days()),
             n_unique_videos=('video_id', 'nunique'),
             n_videos_w_transcript=('videos_with_transcript', 'sum'),
             n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),

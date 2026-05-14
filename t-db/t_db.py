@@ -35,7 +35,7 @@ class Process_Tdb:
             # matching_dfs = pd.concat(self.loop_through_id_db(t_db_df))
             id_df = self.spark.createDataFrame(self.get_ids())
             id_df = id_df.withColumn('id', col('id').cast('string'))
-            matching_dfs = spark_ids.join(t_db_df, on='id', how='inner').toPandas()
+            matching_dfs = id_df.join(t_db_df, on='id', how='inner').toPandas()
             matching_dfs.to_csv(f'match_{local_start_date}.csv')
             
             local_start_date += pd.DateOffset(months=analysis_range)

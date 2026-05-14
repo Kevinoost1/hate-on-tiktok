@@ -12,7 +12,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 def main():
     p = Process_Tdb()
-    # matching_df = pd.concat(p.loop_trough_t_db())
     matching_df = pd.concat(p.loop_trough_t_db())
 
     print(matching_df.head(10))
@@ -25,18 +24,18 @@ class Process_Tdb:
         self.start_date = pd.to_datetime('2023-09-01')
         self.end_date = pd.to_datetime('2026-03-01')
 
-    def loop_trough_t_db(self, analysis_range: int=1) -> Iterator[pd.DataFrame]:
+    def loop_trough_t_db(self, analysis_range: int=3) -> Iterator[pd.DataFrame]:
         local_start_date = self.start_date
         
-        # while local_start_date <= self.end_date:
-        while local_start_date <= self.start_date + pd.DateOffset(months=analysis_range):
+        while local_start_date <= self.end_date:
+        # while local_start_date <= self.start_date + pd.DateOffset(months=analysis_range):
             t_db_df: pd.DataFrame = self.get_data(start_date_ymd=local_start_date, end_date_ymd=local_start_date + pd.DateOffset(months=analysis_range))
 
             # matching_dfs = pd.concat(self.loop_through_id_db(t_db_df))
             id_df = self.spark.createDataFrame(self.get_ids())
             id_df = id_df.withColumn('id', col('id').cast('string'))
             matching_dfs = id_df.join(t_db_df, on='id', how='inner').toPandas()
-            matching_dfs.to_csv(f'match_{local_start_date}.csv')
+            matching_dfs.to_csv(f'{BASE_DIR}/t-db/match_{local_start_date}.csv')
             
             local_start_date += pd.DateOffset(months=analysis_range)
 

@@ -64,7 +64,8 @@ class Database:
 
     def enforce_correct_structure(self, tableName: str) -> None:
         requiredCols = {'translation': 'TEXT', 'filtered': 'BOOLEAN', 'topic': 'TEXT', 'topic_prob': 'REAL', 
-                        'sent': 'TEXT', 'sent_prob': 'REAL', 'intolerance': 'REAL', 'intolerance_prob': 'REAL'}
+                        'sent': 'TEXT', 'sent_prob': 'REAL', 'intolerance': 'REAL', 'intolerance_prob': 'REAL', 
+                        'subtopic': 'TEXT', 'subtopic_prob': 'REAL'}
 
         with self.connect() as conn:
             cursor = conn.cursor()

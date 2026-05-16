@@ -11,7 +11,7 @@ def main():
 
     df = database.retrieve_data(tableName='transcript_classification tc LEFT JOIN videos v ON tc.video_id=v.id', 
                                 colNames=['tc.id', 'tc.video_id', 'tc.translation', 'v.desc'], 
-                                restrictions='(tc.topic = "News, Politics & Societal Issues") AND (tc.subtopic IS NULL)', orderby='tc.id ASC', batch_size=1000)
+                                restrictions='(tc.topic = "News, Politics & Societal Issues") AND (tc.sent IS NULL)', orderby='tc.id ASC', batch_size=1000)
     
 
     id_df = transcripts_to_txt(df, 'translation', 'desc', mergeTargetName='id')

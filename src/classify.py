@@ -49,7 +49,7 @@ def get_results(id_csvName: str='id.csv', results_csvName: str='results.csv',
 
 if __name__=='__main__':
     db = Database('transcript_classification', db_path="/projects/pi-mai/Project-Data-Donation/database/db.sqlite3")
-    id_df = get_results(predColumnName='subtopic', probColumName='subtopic_prob', resultsColumnName='pred')
+    id_df = get_results(predColumnName='sent', probColumName='sent_prob', resultsColumnName='pred')
 
     db.update_data('transcript_classification', id_df)
     

@@ -56,10 +56,11 @@ All results are saved to a .json so it's easy to copy from and view at later mom
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+TOPIC = 'News, Politics & Societal Issues'
 
 
 def main():
-    db = Database(db_path=BASE_DIR / 'database' / 'old_db.sqlite3')
+    db = Database(db_path=BASE_DIR / 'database' / 'db.sqlite3')
     prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()
@@ -98,7 +99,7 @@ def main():
 
 
 class PrepareData():
-    def __init__(self):
+    def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance'):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
         self.political_events = {
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
@@ -108,6 +109,9 @@ class PrepareData():
             # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
             # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
+
+        self.topicColumnName: str = topicColumnName
+        self.intoleranceColumnName: str = 'intoleranceColumnName
 
     """
     Preprocessing for cluster permutation t-test 
@@ -140,8 +144,8 @@ class PrepareData():
         df_baseline = pd.concat(baselines, ignore_index=True)
 
         for d in [df_epochs, df_baseline]:
-            d['is_news'] = (d['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-            d['high_int'] = (d['intolerance'] >= 5).astype(int)
+            d['is_news'] = (d[self.topicColumnName] == TOPIC).astype(int)
+            d['high_int'] = (d[self.intoleranceColumnName] >= 5).astype(int)
 
         event_df = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_civility=('high_int', 'sum')).reset_index()
         event_df['ratio'] = event_df['n_news'] / event_df['n_total']
@@ -160,13 +164,13 @@ class PrepareData():
     NOTE. This method works with the multiverse analysis
     """
     def construct_civility(self, timeSeriesDf: pd.DataFrame) -> pd.DataFrame:
-        df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'unique_id', 'official', 'll3_topic_single_pred', 'intolerance', 'impoliteness']]
+        df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'unique_id', 'official', self.topicColumnName, self.intoleranceColumnName]] #, 'impoliteness']]
  
-        df = df[(df['ll3_topic_single_pred'] == 'Politics & Social Issues') & (df['official'] != 0)]
+        df = df[(df[self.topicColumnName] == TOPIC) & (df['official'] != 0)]
         
         results: pd.DataFrame = (df.groupby(['unique_id', 'official'], as_index=False). agg(
-            avg_impoliteness=('impoliteness', 'mean'),
-            avg_intolerance=('intolerance', 'mean')
+            # avg_impoliteness=('impoliteness', 'mean'),
+            avg_intolerance=(self.intoleranceColumnName, 'mean')
         ))
         results['official'] = results['official'].astype(int)
         return results
@@ -176,17 +180,17 @@ class PrepareData():
     -> Create an event variable (always one after t time since every video is eventually scrolled by
     -> Only focus on news vs. not news
     """
-    def construct_survival(self, timeSeriesDf: pd.DataFrame, topicColumnName:str= 'll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred', cutoff: int=3) -> pd.DataFrame:
+    def construct_survival(self, timeSeriesDf: pd.DataFrame, sentColumnName: str='ll3_sent_cat_pred', cutoff: int=3) -> pd.DataFrame:
         df: pd.DataFrame = timeSeriesDf.copy()[[topicColumnName, sentColumnName, 'watch_time_s', 'age']].assign(event=1)
 
         # RD: A cutoff was set at 3 sec, in line with Meta's policy for Instagram, to count a video as viewed
         df = df[df['watch_time_s'] >= cutoff]
 
-        df.loc[df['ll3_topic_single_pred'] != 'Politics & Social Issues', 'll3_topic_single_pred'] = 'Other'
+        df.loc[df[self.topicColumnName] != TOPIC, self.topicColumnName] = 'Other'
         return df
         
 class Graphs():
-    def __init__(self):
+    def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance'):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
         self.political_events = {
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
@@ -197,14 +201,17 @@ class Graphs():
             # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
+        self.topicColumnName: str = topicColumnName
+        self.intoleranceColumnName: str = intoleranceColumnName
+
     # TO DO: make the graph nicer    
-    def create_km_graph(self, dfs: list[pd.DataFrame], topicColumnName: str='ll3_topic_single_pred', sentColumnName: str='ll3_sent_cat_pred') -> plt.Figure:
+    def create_km_graph(self, dfs: list[pd.DataFrame], sentColumnName: str='sent') -> plt.Figure:
         df: pd.DataFrame = dfs[0]
 
         km = KaplanMeierFitter()
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-        for i, (classification, column) in enumerate({'topic': topicColumnName, 'sent': sentColumnName}.items()):
+        for i, (classification, column) in enumerate({'topic': self.topicColumnName, 'sent': sentColumnName}.items()):
             ax_classification = axes[i]
 
             for idx, (label, df_label) in enumerate(df.groupby(column)):
@@ -230,8 +237,8 @@ class Graphs():
     def create_timeseries_graph(self, timeSeriesDfs) -> plt.Figure: 
         df: pd.DataFrame = timeSeriesDfs[0].copy()
 
-        df['is_news'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-        df['high_int'] = (df['intolerance'] >= 5).astype(int)
+        df['is_news'] = (df[self.topicColumnName] == TOPIC).astype(int)
+        df['high_int'] = (df[self.intoleranceColumnName] >= 5).astype(int)
 
         per_user: pd.DataFrame = df.groupby(['user_id', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_high_int=('high_int', 'sum')).reset_index()
         per_user['ratio'] = per_user['n_news'] / per_user['n_total']
@@ -292,19 +299,19 @@ class Graphs():
         fig, axes = plt.subplots(2, 1, figsize=(8,6), sharex=True)
 
         for df in results:
-            sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
+            # sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
             sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[1])
         
         combined: pd.DataFrame = pd.concat(results, ignore_index=True)
         avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))
 
-        sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
+        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
 
         sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
 
-        axes[0].set_ylabel("Average Impoliteness")
-        axes[0].set_title("Average Civility per Channel Type")
-        axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
+        # axes[0].set_ylabel("Average Impoliteness")
+        # axes[0].set_title("Average Civility per Channel Type")
+        # axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
 
         axes[1].set_ylabel("Average Intolerance")
         axes[1].set_xticklabels(["Official", "Unofficial"])
@@ -324,7 +331,7 @@ class Graphs():
             fig.savefig(f'plots/{i}.png', dpi=300)
 
 class Statistics:
-    def __init__(self, outputName: str='stats.json'):
+    def __init__(self, outputName: str='stats.json', topicColumnName='topic'):
         self.outputName: str = outputName
         self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
         self.political_events = {
@@ -335,19 +342,21 @@ class Statistics:
             # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
             # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
+
+        self.topicColumnName: str = topicColumnName
         
     def get_descriptives(self, timeSeriesDfs) -> dict[str, dict[str, float]]:
         df: pd.DataFrame = timeSeriesDfs[0].copy()
         df['date_ymd'] = pd.to_datetime(df['date_ymd'])
 
-        df['news_politics'] = (df['ll3_topic_single_pred'] == 'Politics & Social Issues').astype(int)
-        df['videos_with_transcript'] = (df['ll3_topic_single_pred'].notna()).astype(int)
+        df['news_politics'] = (df[self.topicColumnName] == TOPIC).astype(int)
+        df['videos_with_transcript'] = (df[self.topicColumnName].notna()).astype(int)
         for sent in ['Positive', 'Negative', 'Neutral']:
-            df[sent] = (df['ll3_sent_cat_pred'] == sent).astype(int)
+            df[sent] = (df['sent'] == sent).astype(int)
 
         per_user_num: pd.DataFrame = df.groupby('user_id').agg(
             avg_intolerance=('intolerance', 'mean'),
-            avg_impoliteness=('impoliteness', 'mean'),
+            # avg_impoliteness=('impoliteness', 'mean'),
             n_videos=('video_id', 'count'),
             dates=('date_ymd', lambda x: (x.max() - x.min()).days),
             n_unique_videos=('video_id', 'nunique'),
@@ -437,10 +446,10 @@ class Statistics:
 
         for df in dfs:
             int_results = stats.ttest_ind(df.loc[df['official'] == 1, 'avg_intolerance'], df.loc[df['official'] == 2, 'avg_intolerance'], alternative='less') 
-            imp_results = stats.ttest_ind(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness'], alternative='less') 
+            # imp_results = stats.ttest_ind(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness'], alternative='less') 
 
             p_values['intolerance'].append(int_results.pvalue)
-            p_values['impoliteness'].append(imp_results.pvalue)
+            # p_values['impoliteness'].append(imp_results.pvalue)
 
             def cohens_d(official, unofficial):
                 n_official, n_unofficial = len(official), len(unofficial)
@@ -450,12 +459,12 @@ class Statistics:
                 return (official.mean() - unofficial.mean()) / pooled_sd
 
             d_values['intolerance'].append(cohens_d(df.loc[df['official'] == 1, 'avg_intolerance'], df.loc[df['official'] == 2, 'avg_intolerance']))
-            d_values['impoliteness'].append(cohens_d(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness']))
+            # d_values['impoliteness'].append(cohens_d(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness']))
 
             t_values['intolerance'].append(int_results.statistic)
-            t_values['impoliteness'].append(imp_results.statistic)
+            # t_values['impoliteness'].append(imp_results.statistic)
 
-        for analysis_type in ['intolerance', 'impoliteness']:
+        for analysis_type in ['intolerance']: # , 'impoliteness']:
             d_array = np.array(d_values[analysis_type])
             p_array = np.array(p_values[analysis_type])
 
@@ -472,14 +481,14 @@ class Statistics:
     Cox Regression
     """
     def get_survival(self, survival_dfs: pd.DataFrame):
-        df = survival_dfs[0][['ll3_topic_single_pred', 'll3_sent_cat_pred', 'event', 'watch_time_s']].copy()
+        df = survival_dfs[0][[self.topicColumnName, 'sent', 'event', 'watch_time_s']].copy()
 
-        df['ll3_topic_single_pred'] = pd.Categorical(df['ll3_topic_single_pred'], categories=['Other', 'Politics & Social Issues'])
-        df['ll3_sent_cat_pred'] = pd.Categorical(df['ll3_sent_cat_pred'], categories=['Neutral', 'Negative', 'Positive'])
-        df = pd.get_dummies(df, columns=['ll3_topic_single_pred', 'll3_sent_cat_pred'], drop_first=False)
+        df[self.topicColumnName] = pd.Categorical(df[self.topicColumnName], categories=['Other', TOPIC])
+        df['sent'] = pd.Categorical(df['ll3_sent_cat_pred'], categories=['Neutral', 'Negative', 'Positive'])
+        df = pd.get_dummies(df, columns=[self.topicColumnName, 'sent'], drop_first=False)
 
         # RD: Using Other and Neutral as references
-        df = df.drop(columns=['ll3_topic_single_pred_Other','ll3_sent_cat_pred_Neutral'])
+        df = df.drop(columns=[f'{self.topicColumnName}_Other','sent_Neutral'])
 
         cph = CoxPHFitter()
         cph.fit(df, duration_col='watch_time_s', event_col='event')
@@ -496,13 +505,22 @@ class Statistics:
  
 
 class DataExtract:
-    def __init__(self, database: Database, base_dir=BASE_DIR):
+    def __init__(self, database: Database, base_dir=BASE_DIR, topicColumnName='topic', 
+                 sentColumnName='sent', intoleranceColumnName='intolerance', # impolitenessColumnName='impoliteness', 
+                 subtopicColumnName='subtopic'):
         self.database: Database = database
         self.base_dir = base_dir
 
+        self.topicColumnName: str = topicColumnName
+        self.sentColumnName: str = sentColumnName
+        self.intoleranceColumnName: str = intoleranceColumnName
+        # self.impolitenessColumnName: str = impolitenessColumnName
+        self.subtopicColumnName: str = subtopicColumnName
+
     def request_time_series(self, channelOrdering: bool=False, get_qs: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
+        # Add impolitness?
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
-                                                                    colNames=['video_id', 'll3_topic_single_pred', 'translation', 'll3_sent_cat_pred', 'intolerance', 'impoliteness', 'll3_subtopic_single_pred'])
+                                                                    colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
                                                          colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
 

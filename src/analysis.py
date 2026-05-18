@@ -15,6 +15,7 @@ from pathlib import Path
 from mne.stats import permutation_cluster_1samp_test
 from statsmodels.stats.multitest import multipletests
 import math
+import matplotlib.dates as mdates
 
 
 
@@ -94,8 +95,8 @@ def main():
     civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
     km_plot: plt.Figure = graphs.create_km_graph(survival_dfs) 
 
-    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
-    graphs.export_png(politics_t_plot, civility_plot, km_plot)
+    graphs.get_graph_report(civility_plot)
+    graphs.export_png(civility_plot)
 
 
 class PrepareData():
@@ -106,8 +107,8 @@ class PrepareData():
             'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
             'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
             'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
-            # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
         self.topicColumnName: str = topicColumnName
@@ -181,7 +182,7 @@ class PrepareData():
     -> Only focus on news vs. not news
     """
     def construct_survival(self, timeSeriesDf: pd.DataFrame, sentColumnName: str='sent', cutoff: int=3) -> pd.DataFrame:
-        df: pd.DataFrame = timeSeriesDf.copy()[[self.topicColumnName, sentColumnName, 'watch_time_s', 'age']].assign(event=1)
+        df: pd.DataFrame = timeSeriesDf.copy()[[self.topicColumnName, sentColumnName, 'watch_time_s', 'age', 'video_duration']].assign(event=1)
 
         # RD: A cutoff was set at 3 sec, in line with Meta's policy for Instagram, to count a video as viewed
         df = df[df['watch_time_s'] >= cutoff]
@@ -196,9 +197,9 @@ class Graphs():
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
             'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
             'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
-            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20')
-            # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
+            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
         self.topicColumnName: str = topicColumnName
@@ -251,7 +252,7 @@ class Graphs():
         transp = (grand_avg['n_users'] - grand_avg['n_users'].min()) / (grand_avg['n_users'].max() - grand_avg['n_users'].min())
         transp = transp.fillna(0.1)
 
-        fig, axes = plt.subplots(4, 1, sharex=True, figsize=(30, 20), gridspec_kw={'height_ratios': [2, 2, 1, 1]})
+        fig, axes = plt.subplots(4, 1, sharex=True, figsize=(40, 20), gridspec_kw={'height_ratios': [2, 2, 1, 1]})
         for i, row in grand_avg.iterrows():
             axes[0].scatter(row['date_ymd'], row['mean_ratio'], color=self.colors['dark_blue'], alpha=transp.iloc[i], s=15)
             axes[1].scatter(row['date_ymd'], row['mean_int_ratio'], color=self.colors['purple'], alpha=transp.iloc[i], s=15)
@@ -270,12 +271,13 @@ class Graphs():
                 axes[i].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
                 axes[i].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
 
-            legend.append(Line2D([0], [0], color=self.colors['green'], linestyle='--', label=label))
+            # legend.append(Line2D([0], [0], color=self.colors['green'], linestyle='--', label=label))
+            axes[3].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=22, color=self.colors['green'], transform=axes[3].get_xaxis_transform())
 
-        axes[0].set_ylabel('Ratio News in Feed', fontsize=22)
+        axes[0].set_ylabel('Ratio News in Feed', fontsize=20)
         axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time", fontsize=28)
-        axes[0].legend(handles=legend, fontsize=11, frameon=False, loc='upper left')
-        axes[0].set_xlim(pd.to_datetime('2023-09-01'), pd.to_datetime('2025-02-01'))
+        # axes[0].legend(handles=legend, fontsize=18, frameon=False, loc='upper left', bbox_to_anchor=(-2, 1.55))
+        axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
         axes[0].set_ylim(0, 0.3)
 
         axes[1].set_ylabel('Ratio High Intolerance\nNews in Feed', fontsize=22)
@@ -290,33 +292,40 @@ class Graphs():
         for ax in axes:
             ax.tick_params(axis='both', labelsize=20)
 
+        ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='6MS')
+        axes[3].set_xticks(ticks)
+        axes[3].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
         plt.xticks(rotation=45)
+        fig.subplots_adjust(bottom=0.22)
 
         return fig
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]) -> plt.Figure:
         results: list[pd.DataFrame] = dfs
-        fig, axes = plt.subplots(2, 1, figsize=(8,6), sharex=True)
+        fig, axes = plt.subplots(1, 1, figsize=(8,6), sharex=True)
 
-        for df in results:
+        for i, df in enumerate(results):
+            t = i / max(len(results) - 1, 1)
+            alpha = 0.2 + (1 - 0.2) * (1 - t)**5
+
             # sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
-            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[1])
+            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes, linewidth=1, alpha=alpha)
         
-        combined: pd.DataFrame = pd.concat(results, ignore_index=True)
-        avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean')) # , avg_impoliteness=('avg_impoliteness', 'mean'))
+        # combined: pd.DataFrame = pd.concat(results, ignore_index=True)
+        # avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean')) # , avg_impoliteness=('avg_impoliteness', 'mean'))
 
         # sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
-
-        sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
+        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
 
         # axes[0].set_ylabel("Average Impoliteness")
         # axes[0].set_title("Average Civility per Channel Type")
         # axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
 
-        axes[1].set_ylabel("Average Intolerance")
-        axes[1].set_xticklabels(["Official", "Unofficial"])
-        axes[1].set_xlabel("")
-        axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
+        axes.set_ylabel("Average Intolerance")
+        axes.set_xticklabels(["Official", "Unofficial"])
+        axes.set_xlabel("")
+        # axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
 
         return fig
 
@@ -339,8 +348,8 @@ class Statistics:
             'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
             'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
             'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
-            # 'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            # 'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
         }
 
         self.topicColumnName: str = topicColumnName
@@ -481,7 +490,7 @@ class Statistics:
     Cox Regression
     """
     def get_survival(self, survival_dfs: pd.DataFrame):
-        df = survival_dfs[0][[self.topicColumnName, 'sent', 'event', 'watch_time_s']].copy()
+        df = survival_dfs[0][[self.topicColumnName, 'sent', 'event', 'watch_time_s', 'video_duration']].copy()
 
         df[self.topicColumnName] = pd.Categorical(df[self.topicColumnName], categories=['Other', TOPIC])
         df['sent'] = pd.Categorical(df['sent'], categories=['Neutral', 'Negative', 'Positive'])
@@ -520,9 +529,9 @@ class DataExtract:
     def request_time_series(self, channelOrdering: bool=False, get_qs: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
         # Add impolitness?
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
-                                                                    colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName])
+                                                                    colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 2')
 
         videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 
@@ -553,7 +562,7 @@ class DataExtract:
                 def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
                 timeSeriesDfs.append(def_df)
 
-                assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
+                # assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
 
         return timeSeriesDfs
         

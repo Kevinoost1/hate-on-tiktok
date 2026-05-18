@@ -484,7 +484,7 @@ class Statistics:
         df = survival_dfs[0][[self.topicColumnName, 'sent', 'event', 'watch_time_s']].copy()
 
         df[self.topicColumnName] = pd.Categorical(df[self.topicColumnName], categories=['Other', TOPIC])
-        df['sent'] = pd.Categorical(df['ll3_sent_cat_pred'], categories=['Neutral', 'Negative', 'Positive'])
+        df['sent'] = pd.Categorical(df['sent'], categories=['Neutral', 'Negative', 'Positive'])
         df = pd.get_dummies(df, columns=[self.topicColumnName, 'sent'], drop_first=False)
 
         # RD: Using Other and Neutral as references

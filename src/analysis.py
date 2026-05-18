@@ -531,7 +531,7 @@ class DataExtract:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 2')
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
 
         videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 

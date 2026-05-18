@@ -303,7 +303,7 @@ class Graphs():
             sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[1])
         
         combined: pd.DataFrame = pd.concat(results, ignore_index=True)
-        avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean'), avg_impoliteness=('avg_impoliteness', 'mean'))
+        avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean')) # , avg_impoliteness=('avg_impoliteness', 'mean'))
 
         # sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
 

@@ -180,8 +180,8 @@ class PrepareData():
     -> Create an event variable (always one after t time since every video is eventually scrolled by
     -> Only focus on news vs. not news
     """
-    def construct_survival(self, timeSeriesDf: pd.DataFrame, sentColumnName: str='ll3_sent_cat_pred', cutoff: int=3) -> pd.DataFrame:
-        df: pd.DataFrame = timeSeriesDf.copy()[[topicColumnName, sentColumnName, 'watch_time_s', 'age']].assign(event=1)
+    def construct_survival(self, timeSeriesDf: pd.DataFrame, sentColumnName: str='sent', cutoff: int=3) -> pd.DataFrame:
+        df: pd.DataFrame = timeSeriesDf.copy()[[self.topicColumnName, sentColumnName, 'watch_time_s', 'age']].assign(event=1)
 
         # RD: A cutoff was set at 3 sec, in line with Meta's policy for Instagram, to count a video as viewed
         df = df[df['watch_time_s'] >= cutoff]

@@ -111,7 +111,7 @@ class PrepareData():
         }
 
         self.topicColumnName: str = topicColumnName
-        self.intoleranceColumnName: str = 'intoleranceColumnName
+        self.intoleranceColumnName: str = intoleranceColumnName
 
     """
     Preprocessing for cluster permutation t-test 

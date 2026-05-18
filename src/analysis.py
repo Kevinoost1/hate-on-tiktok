@@ -543,7 +543,7 @@ class DataExtract:
             timeSeriesDf = self.rollback_age(timeSeriesDf)
         
         # RD: we only take the part that has classifications. We don't use the other video's for now
-        timeSeriesDf = timeSeriesDf[timeSeriesDf['ll3_topic_single_pred'].notna()].copy()
+        timeSeriesDf = timeSeriesDf[timeSeriesDf['topic'].notna()].copy()
 
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
 

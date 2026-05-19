@@ -194,12 +194,12 @@ class Graphs():
     def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance'):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
         self.political_events = {
-            'Election (NL)' : pd.to_datetime('2023-11-22'),
+            '2023 Election (NL)' : pd.to_datetime('2023-11-22'),
             'Coalition Plans (NL)': pd.to_datetime('2024-05-16'), 
-            'Election (U.S.)': pd.to_datetime('2024-11-05'),
+            '2024 Election (U.S.)': pd.to_datetime('2024-11-05'),
             'Presidential Inauguration': pd.to_datetime('2025-01-20'),
             'Government Fall (NL)' : pd.to_datetime('2025-06-03'), 
-            'Election (NL)': pd.to_datetime('2025-10-29')
+            '2025 Election (NL)': pd.to_datetime('2025-10-29')
         }
 
         self.topicColumnName: str = topicColumnName
@@ -569,7 +569,7 @@ class DataExtract:
                 def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
                 timeSeriesDfs.append(def_df)
 
-                # assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 5 else 2)
+                assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 7 else 2)
 
         return timeSeriesDfs
         

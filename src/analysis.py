@@ -194,23 +194,27 @@ class Graphs():
     def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance'):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
         self.political_events = {
-            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
-            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
-            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
-            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
-            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+            'Election (NL)' : pd.to_datetime('2023-11-22'),
+            'Coalition Plans (NL)': pd.to_datetime('2024-05-16'), 
+            'Election (U.S.)': pd.to_datetime('2024-11-05'),
+            'Presidential Inauguration': pd.to_datetime('2025-01-20'),
+            'Government Fall (NL)' : pd.to_datetime('2025-06-03'), 
+            'Election (NL)': pd.to_datetime('2025-10-29')
         }
 
         self.topicColumnName: str = topicColumnName
         self.intoleranceColumnName: str = intoleranceColumnName
+
+        self.fontsize_labels: int = 30
+        self.fontsize_titles: int = 36
+        self.axesticks: int = 28
 
     # TO DO: make the graph nicer    
     def create_km_graph(self, dfs: list[pd.DataFrame], sentColumnName: str='sent') -> plt.Figure:
         df: pd.DataFrame = dfs[0]
 
         km = KaplanMeierFitter()
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(40, 20))
 
         for i, (classification, column) in enumerate({'topic': self.topicColumnName, 'sent': sentColumnName}.items()):
             ax_classification = axes[i]
@@ -219,17 +223,19 @@ class Graphs():
                 km.fit(durations=df_label['watch_time_s'], event_observed=df_label['event'], label=str(label))
                 km.plot_survival_function(ax=ax_classification, color=list(self.colors.values())[idx])
 
-            ax_classification.set_title(f"Surivival by {classification}")
-            ax_classification.set_xlabel('Watch Time (sec)')
-            ax_classification.set_ylabel('Proportion of Video\'s Still Watched')
+            ax_classification.legend(fontsize=30)
+
+            ax_classification.set_title(f"Surivival by {classification}", fontsize=self.fontsize_titles)
+            ax_classification.set_xlabel('Watch Time (sec)', fontsize=self.fontsize_labels)
+            ax_classification.set_ylabel('Proportion of Video\'s Still Watched', fontsize=self.fontsize_labels)
 
         axes[0].set_xlim(3, 250)
-        axes[0].set_title("Watch Time on TikTok Video's as Seperated by Topic")
-
+        axes[0].set_title("Watch Time on TikTok Video's as Seperated by Topic", fontsize=self.fontsize_titles)
+        axes[0].tick_params(axis='both', labelsize=self.axesticks)
+ 
         axes[1].set_xlim(3, 250)
-        axes[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment")
-
-        plt.tight_layout()
+        axes[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment", fontsize=self.fontsize_titles)
+        axes[1].tick_params(axis='both', labelsize=self.axesticks)
 
         return fig
 
@@ -272,27 +278,27 @@ class Graphs():
                 axes[i].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
 
             # legend.append(Line2D([0], [0], color=self.colors['green'], linestyle='--', label=label))
-            axes[3].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=22, color=self.colors['green'], transform=axes[3].get_xaxis_transform())
+            axes[3].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=self.axesticks, color=self.colors['green'], transform=axes[3].get_xaxis_transform())
 
-        axes[0].set_ylabel('Ratio News in Feed', fontsize=20)
-        axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time", fontsize=28)
+        axes[0].set_ylabel('Ratio News in Feed', fontsize=27)
+        axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time", fontsize=self.fontsize_titles)
         # axes[0].legend(handles=legend, fontsize=18, frameon=False, loc='upper left', bbox_to_anchor=(-2, 1.55))
         axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
         axes[0].set_ylim(0, 0.3)
 
-        axes[1].set_ylabel('Ratio High Intolerance\nNews in Feed', fontsize=22)
+        axes[1].set_ylabel('Ratio Intolerant\nNews in Feed', fontsize=self.fontsize_labels)
         axes[1].set_ylim(0, 0.3)
 
         axes[2].plot(grand_avg['date_ymd'], grand_avg['n_videos'], color=self.colors['brown'], linewidth=1.5, label='Number of Videos')
-        axes[2].set_ylabel('Number of\nVideos', fontsize=22)
+        axes[2].set_ylabel('Number of\nVideos', fontsize=self.fontsize_labels)
 
         axes[3].plot(grand_avg['date_ymd'], grand_avg['n_users'], color=self.colors['orange'], alpha=0.5, label='Number of Participants')
-        axes[3].set_ylabel('Number of\nParticipants', fontsize=22)
+        axes[3].set_ylabel('Number of\nParticipants', fontsize=self.fontsize_labels)
 
         for ax in axes:
-            ax.tick_params(axis='both', labelsize=20)
+            ax.tick_params(axis='both', labelsize=self.axesticks)
 
-        ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='6MS')
+        ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
         axes[3].set_xticks(ticks)
         axes[3].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
 
@@ -303,7 +309,7 @@ class Graphs():
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]) -> plt.Figure:
         results: list[pd.DataFrame] = dfs
-        fig, axes = plt.subplots(1, 1, figsize=(8,6), sharex=True)
+        fig, axes = plt.subplots(1, 1, figsize=(20,20), sharex=True)
 
         for i, df in enumerate(results):
             t = i / max(len(results) - 1, 1)
@@ -319,11 +325,12 @@ class Graphs():
         # sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
 
         # axes[0].set_ylabel("Average Impoliteness")
-        # axes[0].set_title("Average Civility per Channel Type")
+        axes.set_title("Average Civility per Channel Type", fontsize=self.fontsize_titles)
         # axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
 
-        axes.set_ylabel("Average Intolerance")
+        axes.set_ylabel("Average Intolerance", fontsize=self.fontsize_labels)
         axes.set_xticklabels(["Official", "Unofficial"])
+        axes.tick_params(axis='both', labelsize=self.axesticks)
         axes.set_xlabel("")
         # axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
 
@@ -531,7 +538,7 @@ class DataExtract:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 2')
 
         videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 

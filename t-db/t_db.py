@@ -31,9 +31,10 @@ class Process_Tdb:
         # while local_start_date <= self.start_date + pd.DateOffset(months=analysis_range):
             t_db_df: pd.DataFrame = self.get_data(start_date_ymd=local_start_date, end_date_ymd=local_start_date + pd.DateOffset(months=analysis_range))
 
-            # matching_dfs = pd.concat(self.loop_through_id_db(t_db_df))
             id_df = self.spark.createDataFrame(self.get_ids())
             id_df = id_df.withColumn('id', col('id').cast('string'))
+            t_db_df = t_db_df.withColumn('id', col('id').cast('string'))
+
             matching_dfs = id_df.join(t_db_df, on='id', how='inner').toPandas()
 
             matching_dfs.to_csv(f'{BASE_DIR}/t-db/match_{local_start_date}.csv')
@@ -42,28 +43,6 @@ class Process_Tdb:
             local_start_date += pd.DateOffset(months=analysis_range)
 
             yield matching_dfs
-
-    """
-        def loop_through_id_db(self, t_db_df: pd.DataFrame, batch_size=100000) -> Iterator[pd.DataFrame]:
-            offset: int = 0
-            while True:
-                id_df: pd.DataFrame = self.get_ids(offset=offset, batch_size=batch_size)
-                if id_df.empty:
-                    break
-
-                yield self.match_ids(t_db_df, id_df) 
-
-                offset += batch_size
-
-
-        def match_ids(self, t_db_df: pd.DataFrame, id_db_df: pd.DataFrame):
-            spark_ids = self.spark.createDataFrame(id_db_df)
-            print(spark_ids.schema)
-            spark_ids = spark_ids.withColumn('id', col('id').cast('string'))
-
-            return broadcast(spark_ids).join(t_db_df, on='id', how='inner')
-            # return spark_ids.join(t_db_df, on='id', how='inner').toPandas()
-    """
 
     def get_data(self, start_date_ymd: str, end_date_ymd: str) -> pd.DataFrame:
         dataset_dir = BASE_DIR/"t-db/data/py_raw"
@@ -76,6 +55,7 @@ class Process_Tdb:
                     columns_to_import=['platform_uid', 'content_date', 'category', 'incompatible_content_ground'])
 
         spark_df = df._df.select(col('platform_uid').alias('id'), 'content_date', 'category', 'incompatible_content_ground')
+
         return spark_df
 
     def get_ids(self) -> pd.DataFrame:

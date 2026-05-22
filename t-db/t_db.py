@@ -21,7 +21,7 @@ class Process_Tdb:
         self.id_db_path: str = id_db_path
         self.spark = dsa_tdb.utils.spark_session_factory()
 
-        self.start_date = pd.to_datetime('2023-09-01')
+        self.start_date = pd.to_datetime('2024-09-01')
         self.end_date = pd.to_datetime('2026-03-01')
 
     def loop_trough_t_db(self, analysis_range: int=3) -> Iterator[pd.DataFrame]:
@@ -32,11 +32,11 @@ class Process_Tdb:
             t_db_df: pd.DataFrame = self.get_data(start_date_ymd=local_start_date, end_date_ymd=local_start_date + pd.DateOffset(months=analysis_range))
 
             id_df = self.spark.createDataFrame(self.get_ids())
+
             id_df = id_df.withColumn('id', col('id').cast('string'))
             t_db_df = t_db_df.withColumn('id', col('id').cast('string'))
 
             matching_dfs = id_df.join(t_db_df, on='id', how='inner').toPandas()
-
             matching_dfs.to_csv(f'{BASE_DIR}/t-db/match_{local_start_date}.csv')
             print(f'df for month {local_start_date}', matching_dfs.head(10))
             

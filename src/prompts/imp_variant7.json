@@ -1,0 +1,62 @@
+{
+  "mode": "scalar",
+  "chat": false,
+  "system_prompt": "# Impoliteness in political TikTok transcripts\n\nYou are asked to evaluate how impolite a TikTok transcript is.\n\nImpoliteness refers to rude, disrespectful, hostile, or demeaning communication.\n\nImportant distinctions:\n- Do NOT over-penalize profanity when it is not directed at anyone.\n- Swearing used casually, humorously, conversationally, or emotionally should often stay in the 1-3 range.\n- Focus heavily on interpersonal disrespect: insults, mockery, humiliation, stereotypes, or verbal aggression. Friendly (sports) games should not count as antagonism unless the rivalry or hostility is explicitely clear.\n- Mere discussion of politics, violence, crime, or controversial topics is not impolite.\n- Passionate activism or emotional disagreement is not necessarily impolite unless the language becomes hostile or degrading.\n Bodily discomfort or illness is not necessarily impolite unless directly, and with intention, inflicted by another person (this has to be clear from the text).\n- Ignore transcript noise fragmented ASR output unless the hostility is explicit.- Only rate transcripts higher than 1 if you can explicitely motivate and show why you rated it such. \n\nIndicators of HIGH impoliteness:\n- Direct insults (idiot, stupid, etc.)\n- Degrading remarks or body-shaming\n- Slurs or discriminatory phrasing\n- Repeated hostile profanity toward someone\n- Explicit verbal aggression or humiliation\n\n## Scale guidance\n1 = Neutral or respectful\n2 = Mildly rude or contains casual profanity\n3 = Somewhat rude or dismissive\n4 = Clearly disrespectful or confrontational\n5 = Strong insulting tone or repeated aggressive profanity\n6 = Very hostile, hateful, or degrading\n7 = Extreme sustained hostility throughout\n\nBase your rating only on the transcript. Provide a single numeric rating.",
+  "prompt_format": "## Example {n}.\n\nTikTok transcript: {item}\n\nIntolerance rating{label_hint}:",
+  "scale": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "examples": [
+    {
+      "item": "This gas canister was left to explode by an ex. The woman lit the canister on her ex's doorstep and made a run for it, leaving a ball of fire that blew open two doors and caused damage to the building the man wasn't in at the time. The woman's been given 6 years in prison. ",
+      "target_value": 0.0
+    },
+    {
+      "item": "Don't shoot my son! Don't you shoot my son! Look, my wife is a sergeant. Her name is Athena Grant, LAPD. Please call your mother and tell her we'll be home in about half an hour, okay? Or not. Come on. 1 south side of 1753. This your car? It's on the paperwork. Step out of the car, sir. What? Why? That's fine, baby. Where you coming from? Visiting my mother. Do you mind if I ask why you pull me over? Expire tags. Wait here while I run your information. Wait a minute. Wait, I, I actually have. Don't move. Turn around, put your hands on the hood, and wait here while I run your plates. Excuse me. Hold on for a second. I said don't move! Okay, okay. Hands on the hood. A friend here is having trouble listening to directions. Miss, what are you doing to my dad? Get back in the vehicle, may, get back in the car. Do what he says. No, they can't just treat us like this! Take her phone. No, stop! Stop! That's it, dad! Open the air! Stop! Don't shoot my son! Don't you shoot my son! Look, my wife is a sergeant. Her name is Adina Grant, LAPD. Please just a kid. Come here. Okay. It's okay, Harry. Sit tight, man. It's all good. We got this. Come on. You folks have a nice night, then. Come on. Come here, man. Ah! Okay, we're good. We're good. Go get In the car. Let's go. Let's go. Yep, we're good. ",
+      "target_value": 0.6
+    },
+    {
+      "item": "what on earth is going on in the house of Commons ",
+      "target_value": 0.5
+    },
+    {
+      "item": "I know that violence is not the answer, but, yes, it is ",
+      "target_value": 0.6
+    },
+    {
+      "item": "billioner Elon Musk gave 1 press conference at American President Donald Trump in the White House but all press attention goes to musk his son lil x he is 4 years old that boy is called x ash e twelve musk in full his Father's press conference about how he wants to ensure that the US government spends less money he doesn't like it he is bored and it is clearly visible ",
+      "target_value": 0.6
+    },
+    {
+      "item": "Tell me a war in history. Yes. Where civilians haven't been killed. I don't know. We know. We know they killed six million. They killed 12 million. I don't know what to do. We don't know six million Jews, right? Sure. So tell me, how many died in. How many died in Dresda? How many civilians died in German? You know I don't know exactly. Right. You don't actually know. You're talking. I do not talk about you. An old church in Hamburg. You said it's about you. There's some wrong. Yeah, go ahead. There's some wrong. You said it's to do with the ratios. The ratios? You don't know the ratios. When I know for a fact you call Winston Church. When you call Mr. Church a criminal for wasting a ratio. You don't even know what they are. I know for long there's different opinion on the certain scholar. There isn't. There is different. Tell us. Tell us. Tell us! Okay, hold on. This. How many addresses? What? Save the world from a great Nazi terror? Yeah. That you can live in a country that is only around today because of the bravery that man. Showing no gratitude is the height of. Call all the people ",
+      "target_value": 0.6
+    },
+    {
+      "item": "outside and this is going on goddamn yes annoying I have to say Geert Wilders was right fuck the climate goals let this island flood and all their crazy traditions eh that sea level up and fast here we are holding down for that water stop it I don't know what I see ",
+      "target_value": 1.0
+    },
+    {
+      "item": "Did you know that it's going to be illegal to stay for one October? In fact, in the Children's Rights Treaty, there's a clause that says children can't stay for one October. Teachers who want to stay for one October get punished with a lot of punishment, and this can range from a year's imprisonment to shouting at McDonald's, and sadly enough, you have to stay if you're 18 or older because you're not a child anymore.",
+      "target_value": 0.0
+    }, 
+    {
+      "item": "Palestinian asking people why they support Palestine. Cause I'm a human being. Do you think I'm gonna sit back, watch my TV and watch a genocide? No chance. This isn't about religion. So it's not about being Muslim. Yeah. Being Jewish, whatever. I'm a Christian. Yeah. But I'm a human being. That's, that's all that matters to me. You know, I know people keep saying open air prison, but you know what told me today that was about the language, that news. Yeah, right. Yeah. Actually, they're hostages. So everyone's talking about hostages. Yeah. Yeah. Come on, 2 million people hostages. It doesn't make sense. Yeah. It doesn't make sense. And this will never, ever, ever end until they're free. Yeah. It's as simple as that. ",
+      "target_value": 0.8
+    },
+    {
+      "item": "I'll be so glad when. When 야 야 ",
+      "target_value": 0.0
+    },
+    {
+      "item": "And I thought for a moment what I thought of it, and now I think back, I said a little, but what I said was touching, so I'm happy with that.",
+      "target_value": 0.0
+    }
+  ],
+  "_comment": "In the examples, \"target_value\" is the target rating as a float between [0, 1]. This will be automatically mapped to whichever scale is used. This facilitates trying different scales with the same examples."
+}

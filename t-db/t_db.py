@@ -17,8 +17,6 @@ def main():
     matching_df = pd.concat(p.loop_trough_t_db())
 
     print(matching_df.head(10))
-    p.get_p_data()
-
 
 class Process_Tdb:
     def __init__(self, id_db_path: str=BASE_DIR/"database"/"db.sqlite3"):
@@ -27,8 +25,6 @@ class Process_Tdb:
 
         self.start_date = pd.to_datetime('2023-09-01')
         self.end_date = pd.to_datetime('2026-03-01')
-
-        self.last_request_t: int = 0
 
     def loop_trough_t_db(self, analysis_range: int=3) -> Iterator[pd.DataFrame]:
         local_start_date = self.start_date
@@ -43,7 +39,7 @@ class Process_Tdb:
             t_db_df = t_db_df.withColumn('id', col('id').cast('string'))
 
             matching_dfs = id_df.join(t_db_df, on='id', how='inner').toPandas()
-            matching_dfs.to_csv(f'{BASE_DIR}/t-db/match_{local_start_date}.csv')
+            matching_dfs.to_csv(f'{BASE_DIR}/t-db/status_match_{local_start_date}.csv')
             
             local_start_date += pd.DateOffset(months=analysis_range)
 
@@ -65,7 +61,7 @@ class Process_Tdb:
         return spark_df
 
     def get_ids(self) -> pd.DataFrame:
-        query = f"""SELECT id FROM videos"""
+        query = f"""SELECT video_id AS id FROM videos_status"""
         with sqlite3.connect(self.id_db_path) as db:
            id_df = pd.read_sql(query, db)
 

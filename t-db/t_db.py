@@ -1,4 +1,6 @@
 from dsa_tdb.core import TDB_DataFrame
+from dsa_tdb.fetch import fetch_aggregate_month, fetch_parquet_data_table
+import time
 import dsa_tdb
 import sqlite3
 from pathlib import Path
@@ -15,14 +17,18 @@ def main():
     matching_df = pd.concat(p.loop_trough_t_db())
 
     print(matching_df.head(10))
+    p.get_p_data()
+
 
 class Process_Tdb:
     def __init__(self, id_db_path: str=BASE_DIR/"database"/"db.sqlite3"):
         self.id_db_path: str = id_db_path
         self.spark = dsa_tdb.utils.spark_session_factory()
 
-        self.start_date = pd.to_datetime('2024-09-01')
+        self.start_date = pd.to_datetime('2023-09-01')
         self.end_date = pd.to_datetime('2026-03-01')
+
+        self.last_request_t: int = 0
 
     def loop_trough_t_db(self, analysis_range: int=3) -> Iterator[pd.DataFrame]:
         local_start_date = self.start_date
@@ -38,22 +44,22 @@ class Process_Tdb:
 
             matching_dfs = id_df.join(t_db_df, on='id', how='inner').toPandas()
             matching_dfs.to_csv(f'{BASE_DIR}/t-db/match_{local_start_date}.csv')
-            print(f'df for month {local_start_date}', matching_dfs.head(10))
             
             local_start_date += pd.DateOffset(months=analysis_range)
 
             yield matching_dfs
 
-    def get_data(self, start_date_ymd: str, end_date_ymd: str) -> pd.DataFrame:
+    def get_data(self, start_date_ymd: str, end_date_ymd: str) -> pd.DataFrame: 
         dataset_dir = BASE_DIR/"t-db/data/py_raw"
         if dataset_dir.exists():
             shutil.rmtree(dataset_dir, ignore_errors=True)
 
         df = TDB_DataFrame(spark=self.spark)
+
         df.loadData(root_folder=dataset_dir, platform='tiktok', version='full', 
                     start_date=start_date_ymd, end_date=end_date_ymd, 
                     columns_to_import=['platform_uid', 'content_date', 'category', 'incompatible_content_ground'])
-
+        
         spark_df = df._df.select(col('platform_uid').alias('id'), 'content_date', 'category', 'incompatible_content_ground')
 
         return spark_df
@@ -64,7 +70,7 @@ class Process_Tdb:
            id_df = pd.read_sql(query, db)
 
         return id_df
-
+            
     
 if __name__=='__main__':
     main()

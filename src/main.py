@@ -4,7 +4,7 @@ import pandas as pd
 from classify import transcripts_to_txt, get_results
 
 def main():
-    database = Database('transcript_classification', db_path="/projects/pi-mai/Project-Data-Donation/database/150_db.sqlite3")
+    database = Database('transcript_classification', db_path="/projects/pi-mai/Project-Data-Donation/database/db.sqlite3")
     database.enforce_correct_structure('transcript_classification') 
 
     """

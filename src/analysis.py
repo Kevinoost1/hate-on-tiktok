@@ -61,13 +61,13 @@ TOPIC = 'News, Politics & Societal Issues'
 
 
 def main():
-    db = Database(db_path=BASE_DIR / 'database' / 'db.sqlite3')
+    db = Database(db_path=BASE_DIR / 'database' / '90_db.sqlite3')
     prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=True)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=False)
     
     """
     Preprocess for each analysis
@@ -91,12 +91,12 @@ def main():
     """
     Graphs for each analysis
     """
-    politics_t_plot: plt.Figure = graphs.create_timeseries_graph(dfs) 
+    politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
     civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
     km_plot: plt.Figure = graphs.create_km_graph(survival_dfs) 
 
-    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot)
-    graphs.export_png(politics_t_plot, civility_plot, km_plot)
+    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot, data_availability)
+    graphs.export_png(politics_t_plot, civility_plot, km_plot, data_availability)
 
 
 class PrepareData():
@@ -258,7 +258,10 @@ class Graphs():
         transp = (grand_avg['n_users'] - grand_avg['n_users'].min()) / (grand_avg['n_users'].max() - grand_avg['n_users'].min())
         transp = transp.fillna(0.1)
 
-        fig, axes = plt.subplots(4, 1, sharex=True, figsize=(40, 20), gridspec_kw={'height_ratios': [2, 2, 1, 1]})
+        """
+        Timeseries for paper
+        """
+        fig, axes = plt.subplots(2, 1, sharex=True, figsize=(40, 20), gridspec_kw={'height_ratios': [2, 2]})
         for i, row in grand_avg.iterrows():
             axes[0].scatter(row['date_ymd'], row['mean_ratio'], color=self.colors['dark_blue'], alpha=transp.iloc[i], s=15)
             axes[1].scatter(row['date_ymd'], row['mean_int_ratio'], color=self.colors['purple'], alpha=transp.iloc[i], s=15)
@@ -277,35 +280,54 @@ class Graphs():
                 axes[i].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
                 axes[i].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
 
-            # legend.append(Line2D([0], [0], color=self.colors['green'], linestyle='--', label=label))
-            axes[3].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=self.axesticks, color=self.colors['green'], transform=axes[3].get_xaxis_transform())
+            axes[1].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=self.axesticks, color=self.colors['green'], transform=axes[1].get_xaxis_transform())
 
         axes[0].set_ylabel('Ratio News in Feed', fontsize=27)
         axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time", fontsize=self.fontsize_titles)
-        # axes[0].legend(handles=legend, fontsize=18, frameon=False, loc='upper left', bbox_to_anchor=(-2, 1.55))
+
         axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
         axes[0].set_ylim(0, 0.3)
 
         axes[1].set_ylabel('Ratio Intolerant\nNews in Feed', fontsize=self.fontsize_labels)
         axes[1].set_ylim(0, 0.3)
 
-        axes[2].plot(grand_avg['date_ymd'], grand_avg['n_videos'], color=self.colors['brown'], linewidth=1.5, label='Number of Videos')
-        axes[2].set_ylabel('Number of\nVideos', fontsize=self.fontsize_labels)
-
-        axes[3].plot(grand_avg['date_ymd'], grand_avg['n_users'], color=self.colors['orange'], alpha=0.5, label='Number of Participants')
-        axes[3].set_ylabel('Number of\nParticipants', fontsize=self.fontsize_labels)
-
         for ax in axes:
             ax.tick_params(axis='both', labelsize=self.axesticks)
 
         ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
-        axes[3].set_xticks(ticks)
-        axes[3].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        axes[1].set_xticks(ticks)
+        axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
 
         plt.xticks(rotation=45)
         fig.subplots_adjust(bottom=0.22)
 
-        return fig
+        """
+        Data availability for supplement
+        """
+        fig_supplement, axes2 = plt.subplots(2, 1, sharex=True, figsize=(40, 20))
+
+        axes2[0].plot(grand_avg['date_ymd'], grand_avg['n_videos'], color=self.colors['brown'], linewidth=1.5, label='Number of Videos')
+        axes2[0].set_ylabel('Number of\nVideos', fontsize=self.fontsize_labels)
+
+        axes2[1].plot(grand_avg['date_ymd'], grand_avg['n_users'], color=self.colors['orange'], alpha=0.5, label='Number of Participants')
+        axes2[1].set_ylabel('Number of\nParticipants', fontsize=self.fontsize_labels)
+        
+        for label, date in self.political_events.items():
+            for i, plot in enumerate(axes2):
+                axes2[i].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
+                axes2[i].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
+
+        for ax in axes2:
+            ax.tick_params(axis='both', labelsize=self.axesticks)
+
+        ticks2 = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
+        axes2[1].set_xticks(ticks2)
+        axes2[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
+        plt.xticks(rotation=45)
+        fig.subplots_adjust(bottom=0.22)
+
+        return fig, fig_supplement
 
     def create_civility_graph(self, dfs: list[pd.DataFrame]) -> plt.Figure:
         results: list[pd.DataFrame] = dfs
@@ -313,7 +335,7 @@ class Graphs():
 
         for i, df in enumerate(results):
             t = i / max(len(results) - 1, 1)
-            alpha = 0.2 + (1 - 0.2) * (1 - t)**5
+            alpha = 0.2 + (1 - 0.2) * t**5
 
             # sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
             sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes, linewidth=1, alpha=alpha)
@@ -423,16 +445,22 @@ class Statistics:
                 df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=col).sort_index(axis=1)
 
                 # RD: participants who were active in the analysis window, but not on a specific day get 0 on their ratios after baseline correction, essentially pre-analysis window mean imputation
-                df_event = df_event.fillna(0)
-                        
+                df_event = df_event.fillna(0)    
                 x = df_event.values
+
+                mean_exposure = np.mean(x, axis=0)
+
                 t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
 
                 p_val[analysis_type].append(np.min(p) if len(p) > 0 else 1)
                 
                 timepoints = df_event.columns.values
+
                 local_results[analysis_type] = {'t': t.tolist(), 
-                                                'clusters': [{'start_day': int(timepoints[c[0].start]), 'end_day': int(timepoints[c[0].stop - 1])} for c in clusters], 
+                                                'clusters': [{'start_day': int(timepoints[c[0].start]), 
+                                                              'end_day': int(timepoints[c[0].stop - 1]), 
+                                                              'max_peak_height': float(np.max(mean_ts[c[0]])), 
+                                                              'auc': float(np.trapezoid(mean_ts[c[0]], x=timepoints[c[0]]))} for c in clusters],  
                                                 'p': p.tolist()}
             results[event] = local_results
 
@@ -500,17 +528,24 @@ class Statistics:
         df = survival_dfs[0][[self.topicColumnName, 'sent', 'event', 'watch_time_s', 'video_duration']].copy()
 
         df[self.topicColumnName] = pd.Categorical(df[self.topicColumnName], categories=['Other', TOPIC])
+        df_base = df[[self.topicColumnName, 'event', 'watch_time_s']]
+        df_base = pd.get_dummies(df_base, columns=[self.topicColumnName], drop_first=False)
+
         df['sent'] = pd.Categorical(df['sent'], categories=['Neutral', 'Negative', 'Positive'])
         df = pd.get_dummies(df, columns=[self.topicColumnName, 'sent'], drop_first=False)
 
         # RD: Using Other and Neutral as references
         df = df.drop(columns=[f'{self.topicColumnName}_Other','sent_Neutral'])
+        df_base = df_base.drop(columns=[f'{self.topicColumnName}_Other'])
 
         cph = CoxPHFitter()
-        cph.fit(df, duration_col='watch_time_s', event_col='event')
+        models = {}
+        for analysis_type, analysis_df in {'corrected': df, 'uncorrected': df_base}.items():
+            cph.fit(analysis_df, duration_col='watch_time_s', event_col='event')
+            summary = cph.summary.to_dict()
+            models[analysis_type] = summary
 
-        summary = cph.summary.to_dict()
-        self.jsonContent['Watchtime'].append(summary)
+        self.jsonContent['Watchtime'].append(models)
 
         return summary   
             
@@ -538,7 +573,7 @@ class DataExtract:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 2')
 
         videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 
@@ -605,6 +640,7 @@ class DataExtract:
 
 
     # When you run this, convert row values to int in the Database() class
+    # I am aware of how horrible the solution is, but for now it's fine until I think of something more permanent :( 
     def extract_duration(self):
         batch_size=1000
         while True:

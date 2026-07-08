@@ -69,7 +69,7 @@ def main():
     graphs = Graphs()
     stats = Statistics()
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=False)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=True)
     
     """
     Preprocess for each analysis

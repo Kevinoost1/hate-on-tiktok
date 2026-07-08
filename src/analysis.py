@@ -6,10 +6,12 @@ matplotlib.use('Agg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import matplotlib.cm as cm
 import json
 import seaborn as sns
 import scipy.stats as stats
-from lifelines import KaplanMeierFitter, CoxPHFitter
+from lifelines import KaplanMeierFitter, CoxPHFitter 
+from lifelines.plotting import add_at_risk_counts
 import zstandard as zstd
 from pathlib import Path
 from mne.stats import permutation_cluster_1samp_test
@@ -84,7 +86,7 @@ def main():
     """
     desc = stats.get_descriptives(dfs)
     stats.get_civility(civility_dfs)
-    stats.get_survival(survival_dfs)
+    summary, cox_models = stats.get_survival(survival_dfs)
     stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
     stats.dump_to_json()
 
@@ -92,11 +94,12 @@ def main():
     Graphs for each analysis
     """
     politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
-    civility_plot: plt.Figure = graphs.create_civility_graph(civility_dfs)
-    km_plot: plt.Figure = graphs.create_km_graph(survival_dfs) 
+    civility_plot, alt_civ_plot = graphs.create_civility_graph(civility_dfs)
+    km_plot: plt.Figure= graphs.create_km_graph(survival_dfs) 
+    forrest_plot: plt.Figure = graphs.create_hr_forrest(cox_models)
 
-    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot, data_availability)
-    graphs.export_png(politics_t_plot, civility_plot, km_plot, data_availability)
+    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
+    graphs.export_png(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
 
 
 class PrepareData():
@@ -213,20 +216,21 @@ class Graphs():
     def create_km_graph(self, dfs: list[pd.DataFrame], sentColumnName: str='sent') -> plt.Figure:
         df: pd.DataFrame = dfs[0]
 
-        km = KaplanMeierFitter()
         fig, axes = plt.subplots(1, 2, figsize=(40, 20))
 
         for i, (classification, column) in enumerate({'topic': self.topicColumnName, 'sent': sentColumnName}.items()):
             ax_classification = axes[i]
 
             for idx, (label, df_label) in enumerate(df.groupby(column)):
+                km = KaplanMeierFitter()
+
                 km.fit(durations=df_label['watch_time_s'], event_observed=df_label['event'], label=str(label))
                 km.plot_survival_function(ax=ax_classification, color=list(self.colors.values())[idx])
 
             ax_classification.legend(fontsize=30)
 
             ax_classification.set_title(f"Surivival by {classification}", fontsize=self.fontsize_titles)
-            ax_classification.set_xlabel('Watch Time (sec)', fontsize=self.fontsize_labels)
+            ax_classification.set_xlabel('\nWatch Time (sec)', fontsize=self.fontsize_labels)
             ax_classification.set_ylabel('Proportion of Video\'s Still Watched', fontsize=self.fontsize_labels)
 
         axes[0].set_xlim(3, 250)
@@ -234,12 +238,54 @@ class Graphs():
         axes[0].tick_params(axis='both', labelsize=self.axesticks)
  
         axes[1].set_xlim(3, 250)
-        axes[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment", fontsize=self.fontsize_titles)
+        axes[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment\n", fontsize=self.fontsize_titles)
         axes[1].tick_params(axis='both', labelsize=self.axesticks)
 
         return fig
 
+    def create_hr_forrest(self, cox_models):
+        summary = cox_models['corrected'].summary.copy()
 
+        summary['HR'] = np.exp(summary['coef'])
+        summary["lower"] = np.exp(summary['coef lower 95%'])
+        summary["upper"] = np.exp(summary['coef upper 95%'])
+
+        fig, ax = plt.subplots(figsize=(30, 20))
+        summary = pd.concat([summary.drop(f'topic_{TOPIC}'), summary.loc[[f'topic_{TOPIC}']]])
+        
+        y = np.arange(len(summary))
+
+        for i, (_, row) in enumerate(summary.iterrows()):
+            color = self.colors['dark_blue'] if row.name == f'topic_{TOPIC}' else self.colors['orange']
+            alpha = 1 if row.name == f'topic_{TOPIC}' else 0.8
+
+            ax.errorbar(row['HR'], i, xerr=[[row['HR'] - row['lower']], [row['upper'] - row['HR']]], 
+                        fmt='none', capsize=8, markersize=15, elinewidth=4, linewidth=4, color=color, alpha=0.55)
+
+            ax.scatter(row['HR'], i, s=250, color=color, zorder=3)
+
+        labels = {
+            'topic_News, Politics & Societal Issues': 'News, Politics &\nSocietal Issues', 
+            'video_duration': 'Video Duration', 
+            'sent_Positive': 'Positive Sentiment', 
+            'sent_Negative': 'Negative Sentiment'
+        }
+        summary.index = summary.index.map(lambda x: labels.get(x, x))
+
+        ax.axvline(1, color='grey', linestyle='--', linewidth=3)
+        ax.set_yticks(y)
+        ax.set_yticklabels(summary.index)
+
+        ax.tick_params(axis='both', labelsize=self.axesticks)
+
+        ax.set_xlabel('\nHazard Ratio for Video Disengagement', fontsize=self.fontsize_labels)
+        ax.set_ylabel("")
+        ax.set_title("Hazard Ratio Coefficients for Topic, Sentiment, and Video Duration\n", fontsize=self.fontsize_titles)
+
+        fig.subplots_adjust(left=0.15)
+
+        return fig
+        
     # TO DO: make the graph nicer
     def create_timeseries_graph(self, timeSeriesDfs) -> plt.Figure: 
         df: pd.DataFrame = timeSeriesDfs[0].copy()
@@ -283,7 +329,7 @@ class Graphs():
             axes[1].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=self.axesticks, color=self.colors['green'], transform=axes[1].get_xaxis_transform())
 
         axes[0].set_ylabel('Ratio News in Feed', fontsize=27)
-        axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time", fontsize=self.fontsize_titles)
+        axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time\n", fontsize=self.fontsize_titles)
 
         axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
         axes[0].set_ylim(0, 0.3)
@@ -323,6 +369,7 @@ class Graphs():
         ticks2 = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
         axes2[1].set_xticks(ticks2)
         axes2[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        axes2[0].set_title("Data Availability 2023-2026\n", fontsize=self.fontsize_titles)
 
         plt.xticks(rotation=45)
         fig.subplots_adjust(bottom=0.22)
@@ -347,16 +394,45 @@ class Graphs():
         # sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
 
         # axes[0].set_ylabel("Average Impoliteness")
-        axes.set_title("Average Civility per Channel Type", fontsize=self.fontsize_titles)
+        axes.set_title("Average Civility per Channel Type\n", fontsize=self.fontsize_titles)
         # axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
 
         axes.set_ylabel("Average Intolerance", fontsize=self.fontsize_labels)
-        axes.set_xticklabels(["Official", "Unofficial"])
+        axes.set_xticklabels(["Legacy Channels", "Alternative Channels"])
         axes.tick_params(axis='both', labelsize=self.axesticks)
         axes.set_xlabel("")
         # axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
+        
+        """
+        Color Gradient Variant
+        """
+        fig2, axes2 = plt.subplots(1, 1, figsize=(20,20), sharex=True)
+        cmap = cm.get_cmap('Purples')
 
-        return fig
+        for i, df in enumerate(results):
+            t = i / max(len(results) - 1, 1)
+            color = cmap(0.3 + 0.7 * t)
+
+            # sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
+            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes2, linewidth=1, alpha=alpha)
+        
+        # combined: pd.DataFrame = pd.concat(results, ignore_index=True)
+        # avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean')) # , avg_impoliteness=('avg_impoliteness', 'mean'))
+
+        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
+        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
+
+        # axes[0].set_ylabel("Average Impoliteness")
+        axes2.set_title("Average Civility per Channel Type\n", fontsize=self.fontsize_titles)
+        # axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
+
+        axes2.set_ylabel("Average Intolerance", fontsize=self.fontsize_labels)
+        axes2.set_xticklabels(["Legacy Channels", "Alternative Channels"])
+        axes2.tick_params(axis='both', labelsize=self.axesticks)
+        axes2.set_xlabel("")
+        # axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
+
+        return fig, fig2
 
 
     def get_graph_report(self, *figs: tuple[plt.Figure]) -> None:
@@ -445,21 +521,24 @@ class Statistics:
                 df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=col).sort_index(axis=1)
 
                 # RD: participants who were active in the analysis window, but not on a specific day get 0 on their ratios after baseline correction, essentially pre-analysis window mean imputation
-                df_event = df_event.fillna(0)    
+                df_event = df_event.fillna(0) 
                 x = df_event.values
 
-                mean_exposure = np.mean(x, axis=0)
+                mean_ts = np.mean(x, axis=0)
 
                 t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
-
-                p_val[analysis_type].append(np.min(p) if len(p) > 0 else 1)
-                
+                p_val[analysis_type].append(np.min(p) if len(p) > 0 else 1) 
                 timepoints = df_event.columns.values
+
+                # This is just for keeping the effect size uncorrected for baseline such that it is interpretable alongside the graph
+                raw_col = 'ratio' if analysis_type == 'news' else 'int_ratio'
+                df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=raw_col).sort_index(axis=1)
+                mean_ts_raw = np.nanmean(df_event.values, axis=0)
 
                 local_results[analysis_type] = {'t': t.tolist(), 
                                                 'clusters': [{'start_day': int(timepoints[c[0].start]), 
                                                               'end_day': int(timepoints[c[0].stop - 1]), 
-                                                              'max_peak_height': float(np.max(mean_ts[c[0]])), 
+                                                              'max_peak_height': float(np.max(mean_ts_raw[c[0]])), 
                                                               'auc': float(np.trapezoid(mean_ts[c[0]], x=timepoints[c[0]]))} for c in clusters],  
                                                 'p': p.tolist()}
             results[event] = local_results
@@ -538,16 +617,20 @@ class Statistics:
         df = df.drop(columns=[f'{self.topicColumnName}_Other','sent_Neutral'])
         df_base = df_base.drop(columns=[f'{self.topicColumnName}_Other'])
 
-        cph = CoxPHFitter()
-        models = {}
+        model_summary = {}
+        cox_models = {}
+
         for analysis_type, analysis_df in {'corrected': df, 'uncorrected': df_base}.items():
+            cph = CoxPHFitter()
             cph.fit(analysis_df, duration_col='watch_time_s', event_col='event')
+
             summary = cph.summary.to_dict()
-            models[analysis_type] = summary
+            model_summary[analysis_type] = summary
+            cox_models[analysis_type] = cph
 
-        self.jsonContent['Watchtime'].append(models)
+        self.jsonContent['Watchtime'].append(model_summary)
 
-        return summary   
+        return summary, cox_models
             
     def dump_to_json(self):
         with open('stats.json', 'w', encoding='utf-8') as f:
@@ -573,7 +656,7 @@ class DataExtract:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 2')
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
 
         videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 

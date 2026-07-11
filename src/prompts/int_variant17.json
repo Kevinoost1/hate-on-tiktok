@@ -1,0 +1,59 @@
+{
+  "mode": "scalar",
+  "chat": false,
+  "system_prompt": "# Intolerance in political TikTok videos\n\nIntolerance refers specifically to negative, harmful, or exclusionary attitudes toward identifiable social groups or types of persons based on a certain characteristic (e.g., based on religion, ethnicity, nationality, gender, sexual orientation, or similar characteristics). This includes:\n- Explicit or implicit discrimination against a group\n- Dehumanization, derogatory language, or stereotyping\n- Advocacy for exclusion, harm, or restriction of rights\n- Hate speech or hostile generalizations targeting a group\n\nDo NOT consider general rudeness, profanity, interpersonal conflict, or criticism of individuals (not tied to a broader group) as intolerance.\n\nYour task is to evaluate how intolerant a TikTok video transcript is, based ONLY on the presence and severity of group-targeted intolerance. \n\nUse the full scale {scale}, where:\n{scale_min} = No intolerance (no group-targeted language)\nMid-scale = mild mention of group or characteristic targeting, ambiguous, implicit, or mild group-targeted bias or stereotyping\n{scale_max} = Clear, explicit, or severe intolerance (e.g., hate speech, dehumanization, or calls for exclusion/harm). ONLY classify high on the scale when the transcript DIRECTLY aims intolerant language at a person or group, and doesn't just mention such language being used by someone else. Evaluate the speaker's own stance rather than whether intolerant language merely appears in the transcript. News reporting, quotations, satire, or criticism of intolerance should generally receive low scores unless the speaker clearly endorses the intolerant message.\n\nFocus on:\n- Whether a social group or person based on a stereotypical characteristic is targeted\n- The severity and clarity of the content\n- Whether harm, exclusion, or rights violations are implied or stated\n Whether the language in the transcript is DIRECTLY aimed at a group or person, and doesn't just contain a mention of the language being used by someone else\n\nIgnore:\n- Tone alone (e.g., swearing)\n- Non-group-related or stereotypical insults or complaints\n. \n\nCriticism of an individual politician or public figure does not count unless it is generalized to the broader social or political group they belong to.\n",
+  "prompt_format": "## Example {n}.\n\nTikTok transcript: {item}\n\nQuestion: To what extent does this transcript express intolerance toward a social group?\n\nIntolerance rating{label_hint}:",
+  "scale": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "examples": [
+    {
+      "item": "where are you going why are you approaching me can you not sir can I what what the fuck what the fuck",
+      "target_value": 0.0
+    },
+    {
+      "item": "wilders distributes the resistance spray to women to protect themselves against Islamic testosterone bombs",
+      "target_value": 1.0
+    },
+    {
+      "item": "Pro tip for all my London girlies this summer... there is a whole area in Hampstead Heath where no men are allowed",
+      "target_value": 0.6
+    },
+    {
+      "item": "Do you really think I'm gonna let a fucking Muslim in this? Captain Al Qaeda.",
+      "target_value": 1.0
+    },
+    {
+      "item": "All the priest were fucking the altar boys and the aristocrats are fucking everything that moves",
+      "target_value": 0.9
+    },
+    {
+      "item": "This is the police speaking. This club is closed forever.",
+      "target_value": 0.0
+    },
+    {
+      "item": "Donald Trump kicking off the campaign's final week with a massive rally overnight at New York's Madison Square Garden. The rally took a dark and divisive tone long before Trump himself took the stage. Comedian Tony Hinchcliffe, the opening speaker, cracking a racist joke about Latinos. So vulgar it's mostly unerable. These Latinos, they love making babies, too. Just know that. They do. They do. There's no. They don't do that. They. Just like they did to our country. Then pivoting to Puerto Rico. There's literally a floating island of garbage in the middle of the ocean right now. Yeah, I think it's called Puerto Rico. That joke not just offensive, but potentially politically unwise, too, with large populations of Puerto Rican voters spread out across the swing states, including more than 400,000 in Pennsylvania alone. The Trump campaign responding to the comedian set, which included other racist attacks, saying, this joke does not reflect the views of President Trump or the campaign. Other speakers continued the attacks, many targeting Harris. Her and her pimp handlers will destroy our country. She is the Antichrist. The first Samoan, Malaysian, low IQ, former California prosecutor ever to be elected president. It needs to be a landslide. We need to slaughter this other people. And Trump delivered his closing message. Everyone will prosper. Every family will. Will be filled with opportunity and hope. ",
+      "target_value": 0.6
+    },
+    {
+      "item": "no Gaza people will remain in Gaza it's the end 1 trading center full of clouds crabs and tourism, preferably without Palestinians this is not only how the american looks at it President Trump on the future of Gaza but she also daniela weis have been putting for years radical Jewish settlers lead themselves in to occupy more and more Palestinian land and that is illegal under international law she believes that the areas belong to Israel and also want Gaza we are speaking all together about more than a million Jews inside and we are planning to settle all over the Gaza area and begin here she receives a lot of support for her plan This is how the Israeli government approves new colonies those built under her leadership almost always turn out well and many citizens also support her More information Read more in Trump's plan states that he will Want to donate money to leave Gaza but if it is up to wisdom forced departure and therefore ethnic cleansing is also an option even though that is 1 war crime the chapter in Gaza or Gaza's is over ",
+      "target_value": 0.4
+    },
+    {
+      "item": "these images of a South African politician have been going around on social media for a week, but he's actually calling for his party to kill farmers. The video has provoked a lot of reactions. For example, Elon Musk, who lived in South Africa until he was 18, says this is a call to kill all white people in South Africa, and many people inside and outside of the country have understood this too. And he's angry at this politician, Julius Marlema, but he says he's angry at himself. It's not really meant to be. He sang an old song that he thought was about white farmers depriving the country of land that was actually once black people. To better understand where this came from, you have to look at the history of South Africa a little bit until 1990, in that country apartheid ruled, it was regulated in the laws that black Africans were less valuable than the white minority in the country they had to live completely separately black people had to not come to many places and they had fewer rights to own land, and also had to not own land when in 1994 apartheid was abolished and there was for the first time a democratically elected president, nelson mandela changed that, and as a welfare state, it was agreed that white farmers had to give 30 percent of their land to the black population, but now almost 30 years later, there's still very little left, and most of the country is still of white farmers, at the same time white farmers feel as if all of South Africans are insecure because of the high crime rates South Africa is one of the most dangerous countries in the world and every day 75 people are killed. Also white farmers are regularly the victims of robberies, sometimes even killed. That racist violence would be aimed at displacing farmers from their country has never been proven. Because often it's also people who have relatively much money and property and are easy targets because they live in remote areas with that in mind. South Africans also have many black residents who are pushing the farmer too far. But Marlema is not planning to stop singing this song for the time being. Next year there's elections in South Africa, and he wants to vote in this way too.",
+      "target_value": 0.4
+    },
+    {
+      "item": "Just smile for me. Did you rape your daughter like Muhammad did? Did you rape your daughter like Muhammad? Speak English? You only speak English? No speaking English. You don't speak English? Yes, that's that. See, that just shows how ignorant you are, because your Muhammad was a rapist. It says in the. In the hadith. Oh, Muhammad. In your holy book. Oh, Muhammad. What? Oh, Muhammad. Muhammad. Your. Your prophet. You know my prophet? Yeah. He was a rapist. He raped Aisha. Does it say that in the hadith or not? You know that I do speak English. What? No English? You don't speak English? What do you speak? What do you speak? You speak Arabic, the language of the Quran, the Holy Quran, that some. Some people use as a toilet. What do you think of that? People who use the Foren as a toilet? Does it bother you? Does it bother you? Tell me the truth. I don't speak English. You don't speak English? That's why you're selling food in a food cart, because you're ignorant. But you should learn English and it'll help you, of course, when they deport you back to Egypt and the muhabarat wants to interview you for being a ",
+      "target_value": 1.0
+    }
+
+  ],
+  "_comment": "In the examples, \"target_value\" is the target rating as a float between [0, 1]. This will be automatically mapped to whichever scale is used. This facilitates trying different scales with the same examples."
+}

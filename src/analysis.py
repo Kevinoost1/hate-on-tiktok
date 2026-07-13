@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from database import *
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
@@ -19,6 +19,10 @@ from mne.stats import permutation_cluster_1samp_test
 from statsmodels.stats.multitest import multipletests
 import math
 import matplotlib.dates as mdates
+import statsmodels.formula.api as smf
+from pymer4.models import Lmer
+
+
 """
 *Contains all analysis and analysis preprocessing code*
 NOTE. this file contains some comments with the tag: RD; this is to indicate where a research decision is made in the code. They are either self-explanatory or explained in the paper
@@ -78,6 +82,8 @@ def main():
 
     # civility_dfs: list[pd.DataFrame] = [prep.construct_civility(df) for df in dfs]
     civility_dfs: list[pd.DataFrame] = [prep.construct_civility2(df) for df in dfs]
+    civility_plot = [df[0] for df in civility_dfs]
+    civility_analysis = [df[1] for df in civility_dfs]
     # survival_dfs: list[pd.DataFrame] = [prep.construct_survival(df) for df in dfs]   
 
     """
@@ -123,6 +129,39 @@ class PrepareData():
         self.intoleranceColumnName: str = intoleranceColumnName
         self.impolitenessColumnName: str = impolitenessColumnName
 
+    def hate_source(self, dfs):
+        results = []
+
+        for comparison in ["Alternative", "Unknown"]:
+            model_df = df_hate[df_hate["official"].isin(["Legacy", comparison])].copy()
+
+            # Binary outcome:
+            # 0 = Legacy
+            # 1 = comparison category
+            model_df["source_binary"] = (
+                model_df["official"] == comparison
+            ).astype(int)
+
+
+            model = Lmer(
+                "source_binary ~ 1 + (1|user_id)",
+                data=model_df,
+                family="binomial"
+            )
+
+            fit = model.fit()
+
+            coef = fit.coefs.loc["Intercept"]
+
+            results.append({
+                "comparison": comparison,
+                "estimate": coef["Estimate"],
+                "p_value": coef["P-val"],
+                "odds_ratio": np.exp(
+                    coef["Estimate"]
+                )
+            }) 
+            return pd.DataFrame(results)
 
     def hate_pred(self, df):
         df['high_hate'] = (df['intolerance'] > 5).astype(int)
@@ -331,7 +370,10 @@ class PrepareData():
  
         df['high_hate'] = (df['intolerance'] > 5).astype(int)
         df.loc[df['official'] == 0, 'official'] = 3
-        
+
+        analysis_df = df[df['high_hate'] == 1].copy()
+        analysis_df["official"] = analysis_df["official"].map({1: "Legacy", 2: "Alternative", 3: "Unknown"})
+            
         results: pd.DataFrame = (df.groupby(['user_id', 'official'], as_index=False). agg(
             # avg_impoliteness=('impoliteness', 'mean'),
             n_intolerance=('high_hate', 'sum')
@@ -341,7 +383,7 @@ class PrepareData():
 
         results['ratio_int'] = (results['n_intolerance'] /results['n_total'])
 
-        return results
+        return results, analysis_df
 
     """
     Preprocessing for survival analysis

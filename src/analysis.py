@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 from database import *
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('TkAgg')
 from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.cm as cm
@@ -18,7 +19,13 @@ from mne.stats import permutation_cluster_1samp_test
 from statsmodels.stats.multitest import multipletests
 import math
 import matplotlib.dates as mdates
-
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+import umap.umap_ as umap
+from scipy.stats import zscore 
+from statsmodels.formula.api import mixedlm
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+from statsmodels.genmod.bayes_mixed_glm import BinomialBayesMixedGLM
 
 
 """
@@ -74,36 +81,43 @@ def main():
     """
     Preprocess for each analysis
     """
-    politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
-    politics_t_event_dfs = [df[0] for df in politics_t_dfs]
-    politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
+    # politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
+    # politics_t_event_dfs = [df[0] for df in politics_t_dfs]
+    # politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
 
-    civility_dfs: list[pd.DataFrame] = [prep.construct_civility(df) for df in dfs]
-    survival_dfs: list[pd.DataFrame] = [prep.construct_survival(df) for df in dfs]   
+    # civility_dfs: list[pd.DataFrame] = [prep.construct_civility(df) for df in dfs]
+    civility_dfs: list[pd.DataFrame] = [prep.construct_civility2(df) for df in dfs]
+    # survival_dfs: list[pd.DataFrame] = [prep.construct_survival(df) for df in dfs]   
 
     """
     Statistics for each analysis and descriptives
     """
-    desc = stats.get_descriptives(dfs)
-    stats.get_civility(civility_dfs)
-    summary, cox_models = stats.get_survival(survival_dfs)
-    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
-    stats.dump_to_json()
+    # desc = stats.get_descriptives(dfs)
+    # stats.get_civility(civility_dfs)
+    # summary, cox_models = stats.get_survival(survival_dfs)
+    # stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
+    # stats.dump_to_json()
 
     """
     Graphs for each analysis
     """
-    politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
-    civility_plot, alt_civ_plot = graphs.create_civility_graph(civility_dfs)
-    km_plot: plt.Figure= graphs.create_km_graph(survival_dfs) 
-    forrest_plot: plt.Figure = graphs.create_hr_forrest(cox_models)
+    # politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
+    # civility_plot, alt_civ_plot = graphs.create_civility_graph(civility_dfs)
+    civility_plot = graphs.create_civility_graph2(civility_dfs)
+    # km_plot: plt.Figure= graphs.create_km_graph(survival_dfs) 
+    # forrest_plot: plt.Figure = graphs.create_hr_forrest(cox_models)
 
-    graphs.get_graph_report(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
-    graphs.export_png(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
+    # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
+    graphs.get_graph_report(civility_plot)
+    # graphs.export_png(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
+    graphs.export_png(civility_plot)
+    #
+    # prep.test(dfs[0])
+    # prep.hate_pred(dfs[0])
 
 
 class PrepareData():
-    def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance'):
+    def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance', impolitenessColumnName='impoliteness'):
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
         self.political_events = {
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
@@ -116,6 +130,148 @@ class PrepareData():
 
         self.topicColumnName: str = topicColumnName
         self.intoleranceColumnName: str = intoleranceColumnName
+        self.impolitenessColumnName: str = impolitenessColumnName
+
+
+    def hate_pred(self, df):
+        df['high_hate'] = (df['intolerance'] > 5).astype(int)
+        df = df[df['watch_time_s'] > 3]
+
+        df['prop_watched'] = (df['watch_time_s'] / df['video_duration']).clip(0, 1)
+        df['log_watch'] = np.log1p(df['prop_watched'])
+
+        df['next_high_int'] = (df.groupby('user_id')['high_hate'].shift(-1))
+        df_model = df.dropna(subset=['next_high_int']).reset_index(drop=True)
+        df_model['next_high_int'] = (df_model['next_high_int'].astype(int))
+
+        model = BinomialBayesMixedGLM.from_formula("next_high_int ~ high_hate + log_watch",
+            {"user": "0 + C(user_id)"}, df_model)
+        result = model.fit_vb()
+
+        print(result.summary())
+
+    def test(self, df):
+        # still need to add impoliteness
+        df['high_hate'] = (df['intolerance'] > 5.5).astype(int)
+        df_hate = df[df['high_hate'] == 1]
+
+        """
+        Even wilder alg idea
+        """
+        def pred():
+            df = df[df['watch_time_s'] > 3]
+            df['prop_watched'] = df['watch_time_s'] / df['video_duration'].clip(0, 1)
+            df['log_watch'] = np.log1p(df['prop_watched'])
+            df['next_high_int'] = (df.groupby('user_id')['high_hate'].shift(-1))
+            df_model = df.dropna(subset=['next_high_int']).reset_index(drop=True)
+            df_model['next_high_int'] = (df_model['next_high_int'].astype(int))
+            df_model = df_model.dropna(subset=['next_high_int', 'high_hate', 'log_watch', 'user_id']).reset_index(drop=True)
+
+            model = BinomialBayesMixedGLM.from_formula('next_high_int ~ high_int * log_watch', 
+                                                    {'user': '0 + C(user_id)'}, df_model)
+            results = model.fit_vb()
+            print(results.summary())
+        """
+        Wild alg recommend idea
+        """
+        df = df[df['topic'] == 'News, Politics & Societal Issues'].sort_values(['user_id', 'timestamp'])
+        df['next_int'] = (df.groupby('user_id')['intolerance'].shift(-1))
+        df['exposure'] = (df['intolerance'] * np.log1p(df['watch_time_s']))
+        df['prop_watched'] = df['watch_time_s'] / df['video_duration']
+        df['log_watch'] = np.log1p(df['prop_watched'])
+        df = df.dropna(subset=['next_int']).reset_index(drop=True)
+        
+        model = mixedlm('next_int ~ intolerance * log_watch', data=df, groups=df['user_id'])
+        results = model.fit()
+        print(results.summary())
+        
+        """
+        Hate distribution heatmap
+        """
+        df['int_rounded'] = df['intolerance'].apply(lambda x: np.round(x, decimals=0))
+
+        exposure_matrix = (df.groupby(['user_id', 'int_rounded']).size().unstack(fill_value=0))
+        exposure_matrix = exposure_matrix.div(exposure_matrix.sum(axis=1), axis=0)
+
+        sns.heatmap(exposure_matrix, cmap='viridis')
+        plt.xlabel("intolerance Rating")
+        plt.ylabel("Participant")
+        plt.title("Exposure to Intolerance per Participant")
+        plt.show()
+
+        """
+        Hate distribution vervolg
+        """
+        z = linkage(exposure_matrix.drop(columns='cluster', errors='ignore'), method='ward')
+        plt.figure(figsize=(10, 5))
+        dendrogram(z)
+        plt.title("Participant similarity based on intolerance exposure")
+        plt.xlabel("Participants")
+        plt.ylabel("Distance")
+        plt.show()
+
+        clusters = fcluster(z, t=3, criterion='maxclust')
+        reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
+        embedding = reducer.fit_transform(exposure_matrix)
+
+        umap_df = pd.DataFrame({'UMAP1': embedding[:, 0], 'UMAP2': embedding[:, 1], 'cluster': clusters, 'user_id': exposure_matrix.index})
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(data=umap_df, x='UMAP1', y='UMAP2', hue='cluster', palette='viridis', s=80)
+        plt.title("Participant clusters based on intolerance exposure profiles")
+        plt.xlabel("UMAP dimension 1")
+        plt.ylabel("UMAP dimension 2")
+        plt.legend(title="Cluster")
+        plt.show()
+
+        """
+        Exposure Plot
+        """
+        user_exposure = (df.groupby('user_id').agg(total_videos=('unique_id', 'size'), hateful_videos=('high_hate', 'sum')).reset_index())
+        user_exposure['hate_ratio'] = (user_exposure['hateful_videos'] / user_exposure['total_videos'])
+
+        fig_exp = plt.figure(figsize=(8,5))
+        sns.histplot(data=user_exposure, x='hate_ratio', bins=20)
+        plt.xlabel("Proportion of High Hate Videos")
+        plt.ylabel("Number of participants")
+        plt.title("Distribution of hateful content exposure across participants")
+        plt.show()
+        
+        """
+        Pareto Plot 
+        """
+
+        author_exposure = (df_hate.groupby(['unique_id', 'official']).agg(
+            exposures=('user_id', 'size'), 
+            unique_users=('user_id', 'nunique'), 
+            hateful_videos=('unique_id', 'nunique')).reset_index())
+
+        author_exposure = (author_exposure.sort_values('exposures', ascending=False).reset_index(drop=True))
+
+        author_exposure['exposure_share'] = (author_exposure['exposures'] / author_exposure['exposures'].sum())
+        author_exposure['cumulative_exposure'] = (author_exposure['exposure_share'].cumsum())
+        author_exposure['rank'] = (author_exposure.index + 1)
+
+        colors = {
+            0.0: "#D55E00",  # Niche
+            1.0: "#009E73",  # Legacy
+            2.0: "#001158"   # Alternative
+        }
+        fig, ax1 = plt.subplots(figsize=(14,6))
+
+        ax1.bar(author_exposure['rank'], author_exposure['exposures'], color=author_exposure['official'].map(colors))
+        ax1.set_xlabel("Video Creators by Hateful Exposure")
+        ax1.set_ylabel("Number of Participant Exposures to Hateful Content")
+
+        ax2 = ax1.twinx()
+        ax2.plot(author_exposure['rank'], author_exposure['cumulative_exposure'] * 100, color="#b03aa3")
+        ax2.set_ylabel("Cumulative Share of Hateful Exposure (%)")
+
+        legend = [patches.Patch(color= "#D55E00", label="Unknown"), patches.Patch(color="#009E73", label="Legacy"), patches.Patch(color="#001158", label="Alternative")]
+        ax1.legend(handles=legend)
+        plt.title("Concentration of Hateful News, Politics & Societal Issues Videos Across Creators")
+        plt.show()
+
+        return fig_exp, fig
 
     """
     Preprocessing for cluster permutation t-test 
@@ -177,6 +333,23 @@ class PrepareData():
             avg_intolerance=(self.intoleranceColumnName, 'mean')
         ))
         results['official'] = results['official'].astype(int)
+        return results
+
+    def construct_civility2(self, timeSeriesDf: pd.DataFrame) -> pd.DataFrame:
+        df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'unique_id', 'official', self.topicColumnName, self.intoleranceColumnName]] #, 'impoliteness']]
+ 
+        df['high_hate'] = (df['intolerance'] > 5).astype(int)
+        df.loc[df['official'] == 0, 'official'] = 3
+        
+        results: pd.DataFrame = (df.groupby(['user_id', 'official'], as_index=False). agg(
+            # avg_impoliteness=('impoliteness', 'mean'),
+            n_intolerance=('high_hate', 'sum')
+        ))
+        results['official'] = results['official'].astype(int)
+        results['n_total'] = (results.groupby('user_id')['n_intolerance'].transform('sum'))
+
+        results['ratio_int'] = (results['n_intolerance'] /results['n_total'])
+
         return results
 
     """
@@ -403,6 +576,35 @@ class Graphs():
         axes.set_xlabel("")
         # axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
         
+    def create_civility_graph2(self, dfs: list[pd.DataFrame]) -> plt.Figure:
+        fig, ax = plt.subplots(1, 1, figsize=(20, 20))
+
+        n_defs = len(dfs)
+        offsets = np.linspace(-0.22, 0.22, n_defs)
+
+        for i, df in enumerate(dfs):
+            summary = (df.groupby("official")["ratio_int"].agg(mean="mean", sem=lambda x: x.std(ddof=1) / np.sqrt(len(x)))
+                .reindex([1, 2, 3])
+                .reset_index())
+
+            x = np.arange(3) + offsets[i]
+            t = i / max(n_defs - 1, 1)
+            alpha = 0.2 + (1 - 0.2) * t**5
+
+            ax.errorbar(x, summary["mean"], yerr=summary["sem"], fmt="o", linestyle="none", capsize=5, color=self.colors["purple"], alpha=alpha, markersize=10,linewidth=2,)
+
+        ax.set_xticks(np.arange(3))
+        ax.set_xticklabels(["Legacy Channels", "Alternative Channels", "Unknown Source"])
+
+        ax.set_ylabel("Ratio of Hateful Videos", fontsize=self.fontsize_labels)
+        ax.set_xlabel("")
+        ax.set_title("Average High Hate Ratio per Channel Type", fontsize=self.fontsize_titles)
+        ax.tick_params(axis="both", labelsize=self.axesticks)
+
+        plt.tight_layout()
+        return fig        
+
+        
         """
         Color Gradient Variant
         """
@@ -414,7 +616,7 @@ class Graphs():
             color = cmap(0.3 + 0.7 * t)
 
             # sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
-            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes2, linewidth=1, alpha=alpha)
+            sns.pointplot(data=df, x="official", y="ratio_int", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes2, linewidth=1, alpha=alpha)
         
         # combined: pd.DataFrame = pd.concat(results, ignore_index=True)
         # avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean')) # , avg_impoliteness=('avg_impoliteness', 'mean'))
@@ -656,7 +858,7 @@ class DataExtract:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'])
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 90')
 
         videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 
@@ -688,6 +890,8 @@ class DataExtract:
                 timeSeriesDfs.append(def_df)
 
                 assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 7 else 2)
+
+        # timeSeriesDf.to_csv('timeseries.csv')
 
         return timeSeriesDfs
         

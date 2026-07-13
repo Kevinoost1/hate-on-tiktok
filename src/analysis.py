@@ -19,15 +19,6 @@ from mne.stats import permutation_cluster_1samp_test
 from statsmodels.stats.multitest import multipletests
 import math
 import matplotlib.dates as mdates
-from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
-import umap.umap_ as umap
-from scipy.stats import zscore 
-from statsmodels.formula.api import mixedlm
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from statsmodels.genmod.bayes_mixed_glm import BinomialBayesMixedGLM
-
-
 """
 *Contains all analysis and analysis preprocessing code*
 NOTE. this file contains some comments with the tag: RD; this is to indicate where a research decision is made in the code. They are either self-explanatory or explained in the paper

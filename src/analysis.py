@@ -20,7 +20,7 @@ from statsmodels.stats.multitest import multipletests
 import math
 import matplotlib.dates as mdates
 import statsmodels.formula.api as smf
-from pymer4.models import Lmer
+# from pymer4.models import Lmer
 
 
 """

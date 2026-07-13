@@ -100,7 +100,7 @@ def main():
     """
     # politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
     # civility_plot, alt_civ_plot = graphs.create_civility_graph(civility_dfs)
-    civility_plot = graphs.create_civility_graph2(civility_dfs)
+    civility_plot = graphs.create_civility_graph2(civility_plot)
     # km_plot: plt.Figure= graphs.create_km_graph(survival_dfs) 
     # forrest_plot: plt.Figure = graphs.create_hr_forrest(cox_models)
 

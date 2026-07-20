@@ -1,4 +1,4 @@
-# .libPaths(c("/zfsstore/projects/pi-mai/r_packages", .libPaths()))
+.libPaths(c("/zfsstore/projects/pi-mai/r_packages", .libPaths()))
 
 library(survival)
 library(coxme)

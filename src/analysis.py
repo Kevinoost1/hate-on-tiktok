@@ -65,13 +65,15 @@ TOPIC = 'News, Politics & Societal Issues'
 
 
 def main():
-    db = Database(db_path=BASE_DIR / 'database' / '90_db.sqlite3')
+    db = Database(db_path=BASE_DIR / 'database' / 'db.sqlite3')
     prep = PrepareData()
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=True)
+    data.extract_duration()
+
+    # dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=False)
     
     """
     Preprocess for each analysis
@@ -81,9 +83,9 @@ def main():
     # politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
 
     # civility_dfs: list[pd.DataFrame] = [prep.construct_civility(df) for df in dfs]
-    civility_dfs: list[pd.DataFrame] = [prep.construct_civility2(df) for df in dfs]
-    civility_plot = [df[0] for df in civility_dfs]
-    civility_analysis = [df[1] for df in civility_dfs]
+    # civility_dfs: list[pd.DataFrame] = [prep.construct_civility2(df) for df in dfs]
+    # civility_plot = [df[0] for df in civility_dfs]
+    # civility_analysis = [df[1] for df in civility_dfs]
     # survival_dfs: list[pd.DataFrame] = [prep.construct_survival(df) for df in dfs]   
 
     """
@@ -100,17 +102,19 @@ def main():
     """
     # politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
     # civility_plot, alt_civ_plot = graphs.create_civility_graph(civility_dfs)
-    civility_plot = graphs.create_civility_graph2(civility_plot)
+    # civility_plot = graphs.create_civility_graph2(civility_plot)
     # km_plot: plt.Figure= graphs.create_km_graph(survival_dfs) 
     # forrest_plot: plt.Figure = graphs.create_hr_forrest(cox_models)
 
     # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
-    graphs.get_graph_report(civility_plot)
+    # graphs.get_graph_report(civility_plot)
     # graphs.export_png(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
-    graphs.export_png(civility_plot)
+    # graphs.export_png(civility_plot)
     #
     # prep.test(dfs[0])
     # prep.hate_pred(dfs[0])
+    # results = prep.hate_source(civility_dfs)
+    # results.to_csv('binomial_civ.csv')
 
 
 class PrepareData():
@@ -130,38 +134,28 @@ class PrepareData():
         self.impolitenessColumnName: str = impolitenessColumnName
 
     def hate_source(self, dfs):
-        results = []
+        results = {}
+        for i, df_hate in dfs:
+            local_results = []
+            for comparison in ["Alternative", "Legacy"]:
+                model_df = df_hate[df_hate["official"].isin(["Unknown", comparison])].copy()
+                model_df["source_binary"] = (model_df["official"] == comparison).astype(int)
 
-        for comparison in ["Alternative", "Unknown"]:
-            model_df = df_hate[df_hate["official"].isin(["Legacy", comparison])].copy()
+                model = Lmer("source_binary ~ 1 + (1|user_id)", data=model_df, family="binomial")
 
-            # Binary outcome:
-            # 0 = Legacy
-            # 1 = comparison category
-            model_df["source_binary"] = (
-                model_df["official"] == comparison
-            ).astype(int)
+                fit = model.fit()
+                coef = fit.coefs.loc["Intercept"]
+                results.append({
+                    "comparison": comparison,
+                    "estimate": coef["Estimate"],
+                    "p_value": coef["P-val"],
+                    "odds_ratio": np.exp(coef["Estimate"]),
+                    "ci_lower": np.exp(coef["2.5_ci"]),
+                    "ci_upper": np.exp(coef["97.5_ci"])
+                })
+            results[i] = local_results
 
-
-            model = Lmer(
-                "source_binary ~ 1 + (1|user_id)",
-                data=model_df,
-                family="binomial"
-            )
-
-            fit = model.fit()
-
-            coef = fit.coefs.loc["Intercept"]
-
-            results.append({
-                "comparison": comparison,
-                "estimate": coef["Estimate"],
-                "p_value": coef["P-val"],
-                "odds_ratio": np.exp(
-                    coef["Estimate"]
-                )
-            }) 
-            return pd.DataFrame(results)
+        return pd.DataFrame(results)
 
     def hate_pred(self, df):
         df['high_hate'] = (df['intolerance'] > 5).astype(int)
@@ -891,7 +885,7 @@ class DataExtract:
         classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
                                                                     colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
         dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 90')
+                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 2')
 
         videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
 
@@ -913,6 +907,9 @@ class DataExtract:
         
         # RD: we only take the part that has classifications. We don't use the other video's for now
         timeSeriesDf = timeSeriesDf[timeSeriesDf['topic'].notna()].copy()
+
+        print('len original', len(timeSeriesDf))
+        print(timeSeriesDf[['timestamp', 'topic', 'author_id']].head())
 
         timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
 

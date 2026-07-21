@@ -21,7 +21,7 @@ COLORS <- c(
 
 
 load_data <- function(){
-  df <- read_csv('timeseries.csv', show_col_types = FALSE)
+  df <- read_csv('survival.csv', show_col_types = FALSE)
 
   df$topic <- trimws(df$topic)
   df$sent <- trimws(df$sent)
@@ -87,7 +87,7 @@ write_results <- function(ml_cox_fit){
 # Load and Edit the Data
 
 df <- define_event(load_data())
-df <- del_users_without_news(df)
+# df <- del_users_without_news(df)
 
 
 # Check Some Assumptions

@@ -80,7 +80,7 @@ write_results <- function(ml_cox_fit){
   results <- rbind(cbind(model = "corrected", as.data.frame(summary(ml_cox_fit$corrected_fit)$coefficients)),
   cbind(model = "uncorrected",as.data.frame(summary(ml_cox_fit$uncorrected_fit)$coefficients)))
   
-  write.csv(results, LOCAL_DIR, row.names = FALSE)
+  write.csv(results, 'survival_results.csv', row.names = FALSE)
 }
 
 

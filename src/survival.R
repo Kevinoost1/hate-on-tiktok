@@ -36,21 +36,8 @@ load_data <- function(){
   return (df)
 }
 
-del_users_without_news <- function(df) {
-  topic_counts <- table(df$user_id, df$topic)
-
-  keep_users <- rownames(topic_counts)[
-    topic_counts[, "Other"] >= 50 &
-    topic_counts[, "News, Politics & Societal Issues"] >= 50
-  ]
-  print(length(unique(df$user_id)))
-
-  df <- df[df$user_id %in% keep_users, ]
-  return (df)
-}
-
 define_event <- function(df){
-  df$event <- as.integer(df$watch_time_s < df$video_duration)
+  df$event <- as.integer(df$watch_time_s <= df$video_duration)
   return (df)
 }
 
@@ -58,11 +45,11 @@ define_event <- function(df){
 ml_cox <- function(df){
   # We made video_duation non-linear -> longer/shorter videos are likely different experiences
   corrected_fit <- coxme(
-    Surv(watch_time_s, event) ~ topic + video_duration + (1 | user_id), data=df
+    Surv(watch_time_s, event) ~ topic + video_duration + (topic | user_id), data=df
   )
 
   uncorrected_fit <- coxme(
-      Surv(watch_time_s, event) ~ topic + (1 | user_id), data=df
+      Surv(watch_time_s, event) ~ topic + (topic | user_id), data=df
     )
 
   return (list(corrected_fit = corrected_fit, uncorrected_fit = uncorrected_fit))
@@ -87,8 +74,6 @@ write_results <- function(ml_cox_fit){
 # Load and Edit the Data
 
 df <- define_event(load_data())
-# df <- del_users_without_news(df)
-
 
 # Check Some Assumptions
 

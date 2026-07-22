@@ -99,7 +99,7 @@ write_results <- function(ml_cox_fit){
 df <- define_event(load_data())
 
 # Just some testing
-df2 <- define_event2(load_Data())
+df2 <- define_event2(load_data())
 ml_cox_randomint(df)
 ml_cox_randomint(df2)
 

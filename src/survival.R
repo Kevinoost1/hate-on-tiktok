@@ -44,13 +44,17 @@ define_event <- function(df){
 
 ml_cox <- function(df){
   # We made video_duation non-linear -> longer/shorter videos are likely different experiences
-  corrected_fit <- coxme(
-    Surv(watch_time_s, event) ~ topic + video_duration + (topic | user_id), data=df
-  )
+  print('start uncorrected model')
+  start <- Sys.time()
+  uncorrected_fit <- coxme(Surv(watch_time_s, event) ~ topic + (topic | user_id), data=df)
+  print(summary(uncorrected_fit))
+  print(paste('ended uncorrected model in', round(as.numeric(difftime(Sys.time(), start, 'mins')), 2))
 
-  uncorrected_fit <- coxme(
-      Surv(watch_time_s, event) ~ topic + (topic | user_id), data=df
-    )
+  print('start corrected model')
+  start <- Sys.time()
+  corrected_fit <- coxme(Surv(watch_time_s, event) ~ topic + video_duration + (topic | user_id), data=df)
+  print(summary(corrected_fit))
+  print(paste('ended corrected model in', round(as.numeric(difftime(Sys.time(), start, 'mins')), 2))
 
   return (list(corrected_fit = corrected_fit, uncorrected_fit = uncorrected_fit))
 }

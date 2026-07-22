@@ -41,37 +41,17 @@ define_event <- function(df){
   return (df)
 }
 
-define_event2 <- function(df){
-  df$event <- as.integer(1)
-  return (df)
-}
-
 
 ml_cox_randomint <- function(df){
-  print('start uncorrected model random intercepts')
+  print('start uncorrected model')
   start <- Sys.time()
   uncorrected_fit <- coxme(Surv(watch_time_s, event) ~ topic + (1 | user_id), data=df)
   print(summary(uncorrected_fit))
   print(paste('ended uncorrected model in', round(as.numeric(difftime(Sys.time(), start, 'mins')), 2)))
 
-  print('start corrected model random intercepts')
-  start <- Sys.time()
-  corrected_fit <- coxme(Surv(watch_time_s, event) ~ topic + video_duration + (1 | user_id), data=df)
-  print(summary(corrected_fit))
-  print(paste('ended corrected model in', round(as.numeric(difftime(Sys.time(), start, 'mins')), 2)))
-}
-
-
-ml_cox_randomslopes <- function(df){
-  print('start uncorrected model')
-  start <- Sys.time()
-  uncorrected_fit <- coxme(Surv(watch_time_s, event) ~ topic + (topic | user_id), data=df)
-  print(summary(uncorrected_fit))
-  print(paste('ended uncorrected model in', round(as.numeric(difftime(Sys.time(), start, 'mins')), 2)))
-
   print('start corrected model')
   start <- Sys.time()
-  corrected_fit <- coxme(Surv(watch_time_s, event) ~ topic + video_duration + (topic | user_id), data=df)
+  corrected_fit <- coxme(Surv(watch_time_s, event) ~ topic + video_duration + (1 | user_id), data=df)
   print(summary(corrected_fit))
   print(paste('ended corrected model in', round(as.numeric(difftime(Sys.time(), start, 'mins')), 2)))
 
@@ -98,14 +78,9 @@ write_results <- function(ml_cox_fit){
 
 df <- define_event(load_data())
 
-# Just some testing
-df2 <- define_event2(load_data())
-ml_cox_randomint(df)
-ml_cox_randomint(df2)
-
 
 # Fit the actual Model
-ml_cox_fit <- ml_cox_randomslopes(df)
+ml_cox_fit <- ml_cox_randomint(df)
 print(summary(ml_cox_fit$corrected_fit))
 print(summary(ml_cox_fit$uncorrected_fit))
 

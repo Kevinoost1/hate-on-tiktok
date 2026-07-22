@@ -43,7 +43,7 @@ define_event <- function(df){
 
 define_event2 <- function(df){
   df$event <- as.integer(1)
-  return df
+  return (df)
 }
 
 

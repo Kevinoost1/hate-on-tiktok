@@ -28,7 +28,7 @@ def main():
     stats = Statistics()
     robust = Robustness(db)
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=False)
 
     politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
     politics_t_event_dfs = [df[0] for df in politics_t_dfs]
@@ -148,27 +148,26 @@ class Statistics:
             local_results = pd.read_csv('hate_source_results.csv').to_dict()
             results[i] = local_results
 
+        def get_results(result_type, category, mapping_dict={'intercept': 0,'legacy': 1, 'alternative': 2}):
+            return (min(r[result_type][mapping_dict[category]] for r in results.values()), 
+                    max(r[result_type][mapping_dict[category]] for r in results.values()))
+
+        # NOTE. we take the inverse OR just for stylistic reasons. In the paper the conclusions are formulated as:
+        # niche higher than ..., however the model gives output: ... lower odds than ... Just a matter of where u put the reference in the text
         results['global'] = {
-            'official1_min_p': min(r['p.value'][1] for r in results.values()), 'official1_max_p': max(r['p.value'][1] for r in results.values()),
-            'official2_min_p': min(r['p.value'][2] for r in results.values()), 'official2_max_p': max(r['p.value'][2] for r in results.values()),
-            'intercept_min_p': min(r['p.value'][0] for r in results.values()), 'intercept_max_p': max(r['p.value'][0] for r in results.values()),
-            'official1_min_coef': min(r['estimate'][1] for r in results.values()), 'official1_max_coef': max(r['estimate'][1] for r in results.values()),
-            'official2_min_coef': min(r['estimate'][2] for r in results.values()), 'official2_max_coef': max(r['estimate'][2] for r in results.values()), 
-            'intercept_min_coef': min(r['estimate'][0] for r in results.values()), 'intercept_max_coef': max(r['estimate'][0] for r in results.values()), 
-            'official1_min_OR': min(r['odds_ratio'][1] for r in results.values()), 'official1_max_OR': max(r['odds_ratio'][1] for r in results.values()),
-            'official2_min_OR': min(r['odds_ratio'][2] for r in results.values()), 'official2_max_OR': max(r['odds_ratio'][2] for r in results.values()),
-            'intercept_min_OR': min(r['odds_ratio'][0] for r in results.values()), 'intercept_max_OR': max(r['odds_ratio'][0] for r in results.values()),
-            'official1_min_OR_inv': 1 / min(r['odds_ratio'][1] for r in results.values()), 'official1_max_OR_inv': 1 / max(r['odds_ratio'][1] for r in results.values()),
-            'official2_min_OR_inv': 1 / min(r['odds_ratio'][2] for r in results.values()), 'official2_max_OR_inv': 1 / max(r['odds_ratio'][2] for r in results.values()),
-            'intercept_min_OR_baseChance': (min(r['odds_ratio'][0] for r in results.values())) / (1 + min(r['odds_ratio'][0] for r in results.values())), 
-                'intercept_max_OR_baseChance': (max(r['odds_ratio'][0] for r in results.values())) / (1 + max(r['odds_ratio'][0] for r in results.values())),
-            'official1_min_stat': min(r['statistic'][1] for r in results.values()), 'official1_max_stat': max(r['statistic'][1] for r in results.values()),
-            'official2_min_stat': min(r['statistic'][2] for r in results.values()), 'official2_max_stat': max(r['statistic'][2] for r in results.values()),
-            'intercept_min_stat': min(r['statistic'][0] for r in results.values()), 'intercept_max_stat': max(r['statistic'][0] for r in results.values()),
-            'official1_min_conflow_OR': min(r['conf_low_OR'][1] for r in results.values()), 'official1_max_conf_OR': max(r['conf_high_OR'][1] for r in results.values()),
-            'official2_min_conflow_OR': min(r['conf_low_OR'][2] for r in results.values()), 'official2_max_conf_OR': max(r['conf_high_OR'][2] for r in results.values()),
-            'intercept_min_conflow_OR': min(r['conf_low_OR'][0] for r in results.values()), 'intercept_max_conf_OR': max(r['conf_high_OR'][0] for r in results.values())
-        }
+            'intercept_min_p': get_results('p.value', 'intercept')[0], 'intercept_max_p': get_results('p.value', 'intercept')[1],
+            'official1_min_p': get_results('p.value', 'legacy')[0], 'official1_max_p': get_results('p.value', 'legacy')[1],
+            'official2_min_p': get_results('p.value', 'alternative')[0], 'official2_max_p': get_results('p.value', 'alternative')[1],
+
+            'official1_min_OR_inv': 1 / get_results('odds_ratio', 'legacy')[0], 'official1_max_OR_inv': 1 / get_results('odds_ratio', 'legacy')[1],
+            'official2_min_OR_inv': 1 / get_results('odds_ratio', 'alternative')[0], 'official2_max_OR_inv': 1 / get_results('odds_ratio', 'alternative')[1],           
+            'intercept_min_OR_baseChance': (get_results('odds_ratio', 'intercept')[0]) / (1 + get_results('odds_ratio', 'intercept')[0]), 
+                'intercept_max_OR_baseChance': ((get_results('odds_ratio', 'intercept')[1]) / (1 + get_results('odds_ratio', 'intercept')[1])),
+
+            'intercept_min_conflow_OR': get_results('conf_low_OR', 'intercept')[0], 'intercept_max_conf_OR': get_results('conf_low_OR', 'intercept')[1],
+            'official1_min_conflow_OR': get_results('conf_low_OR', 'legacy')[0], 'official1_max_conf_OR': get_results('conf_low_OR', 'legacy')[1],
+            'official2_min_conflow_OR': get_results('conf_low_OR', 'alternative')[0], 'official2_max_conf_OR': get_results('conf_low_OR', 'alternative')[1],
+            }
 
         self.jsonContent['Hate Source'].append(results)
         return results
@@ -411,7 +410,7 @@ class DataExtract:
         feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
                                                               colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
-                                                              restrictions='e.user_id != 119') # participant 119 was excluded due to being to old (age 30)
+                                                              restrictions='e.user_id != 119 AND e.user_id < 10') # participant 119 was excluded due to being to old (age 30)
 
         feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]

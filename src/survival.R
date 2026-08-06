@@ -36,6 +36,10 @@ ml_cox_randomint <- function(df, type){
   print('start uncorrected model')
   print(type)
 
+  if (type == 'high_hate'){
+    df <- df[df$topic == 'News, Politics & Societal Issues', ]
+  }
+
   start <- Sys.time()
   formula_uncorrected <- reformulate(c(type, "(1 | user_id)"), response = "Surv(watch_time_s, event)")
   uncorrected_fit <- coxme(formula_uncorrected, data=df)

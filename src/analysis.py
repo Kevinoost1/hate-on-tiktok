@@ -1,63 +1,19 @@
-import numpy as np
 import pandas as pd
-from database2 import *
+import sqlite3
+from database import *
+import subprocess
+import json
+import numpy as np
+from mne.stats import permutation_cluster_1samp_test
+from statsmodels.stats.multitest import multipletests
+from lifelines import KaplanMeierFitter, CoxPHFitter 
+
 import matplotlib
-matplotlib.use('Agg')
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-import matplotlib.cm as cm
-import json
-import seaborn as sns
-import scipy.stats as stats
-from lifelines import KaplanMeierFitter, CoxPHFitter 
-from lifelines.plotting import add_at_risk_counts
-import zstandard as zstd
-from pathlib import Path
-from mne.stats import permutation_cluster_1samp_test
-from statsmodels.stats.multitest import multipletests
-import math
 import matplotlib.dates as mdates
-import statsmodels.formula.api as smf
-# from pymer4.models import Lmer
-
-
-"""
-*Contains all analysis and analysis preprocessing code*
-NOTE. this file contains some comments with the tag: RD; this is to indicate where a research decision is made in the code. They are either self-explanatory or explained in the paper
-
-The file is structured in three parts:
-- Fetch the appropriate dataframe from the database -> DataExtract()
-- Do some basic ordering and preprocessing on that dataframe, depending on the analysis -> PrepareData()
-- Fetch the Graphs -> Graphs()
-- Compute the test statistics and descriptives -> Statistics()
-  
-DataExtract()
-DataExtract will take as input a Database() Object. If you are just working with a DataFrame, you can skip this class. The code should still work if your DataFrame is similar.
-The class always extracts a complete timeseries dataframe with individual feeds. Even though this is quite memory intensive, from this one dataframe you are able to construct all individual analyses, no need for multiple different SQL queries. 
-
-    - The class also takes as arguments: get_qs, to indicate if you want to questionnaire data merged as well and channelOrdering, this is important for the multiverse analysis part but can be insanely memory intensive due to it constructing dataframes for x many definitions. 
-    - A .json file (channel_def.json) is used to store complete lists of official channels under different definitions. This file should be included on the GitHub if you need it. 
-    - The class has two seperate staticmethods to parse the video_duration from compressed strings. It just has to be run once for the video durations to be decompressed and added to the database
-    - The DataExtract() class does not simply return one dataframe, but instead a list of dataframes to work with the multiverse analysis (even if you set channelOrdering to False). 
-        You can process each part of the list seperately as shown in main() and all functions still work if the length of the list is 1 (channelOrdering == False). 
-
-NOTE. I won't go into every specific analysis here and why it's conducted. You can find that information in the paper. 
-
-PrepareData()
-Not much needs to be said here. Methods within this class just take a DataFrame (timeseries) and prepare it for the downstream analyses and graphs.
-There are some research decisions in there, such as a watch time cutoff and the number of days for resampling the news over time analysis. 
-
-Graphs()
-Contains the code for any of the graphs used in the paper. 
-The class methods also take a (prepared) DataFrame and save all the graphs to a pdf so that it's easy to view and paste from and as more high quality .pngs into a folder /plots.
-
-Statistics()
-Methods in this class calculate statistics for any of the analyses based on the prepared dataframe.
-Each analysis has its own method with a seperate descriptives method for retrieving the sample descriptives.
-All results are saved to a .json so it's easy to copy from and view at later moments without rerunning analyses. 
-"""
+matplotlib.use('Agg')
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -65,61 +21,36 @@ TOPIC = 'News, Politics & Societal Issues'
 
 
 def main():
-    db = Database(db_path=BASE_DIR / 'database' / 'db.sqlite3')
-    prep = PrepareData()
+    db = Database(db_path=BASE_DIR / 'database' / '150_db.sqlite3')
+    prep = Preprocess()
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
+    robust = Robustness(db)
 
-    data.extract_duration()
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
 
-    # dfs: list[pd.DataFrame] = data.request_time_series(get_qs=True, channelOrdering=False)
-    
-    """
-    Preprocess for each analysis
-    """
-    # politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
-    # politics_t_event_dfs = [df[0] for df in politics_t_dfs]
-    # politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
+    politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
+    politics_t_event_dfs = [df[0] for df in politics_t_dfs]
+    politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
 
-    # civility_dfs: list[pd.DataFrame] = [prep.construct_civility(df) for df in dfs]
-    # civility_dfs: list[pd.DataFrame] = [prep.construct_civility2(df) for df in dfs]
-    # civility_plot = [df[0] for df in civility_dfs]
-    # civility_analysis = [df[1] for df in civility_dfs]
-    # survival_dfs: list[pd.DataFrame] = [prep.construct_survival(df) for df in dfs]   
+    politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
+    hate_source_plot = graphs.create_hate_source_graph(dfs)
 
-    """
-    Statistics for each analysis and descriptives
-    """
-    # desc = stats.get_descriptives(dfs)
-    # stats.get_civility(civility_dfs)
-    # summary, cox_models = stats.get_survival(survival_dfs)
-    # stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
-    # stats.dump_to_json()
+    graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
+    graphs.export_png(politics_t_plot, hate_source_plot, data_availability)
 
-    """
-    Graphs for each analysis
-    """
-    # politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
-    # civility_plot, alt_civ_plot = graphs.create_civility_graph(civility_dfs)
-    # civility_plot = graphs.create_civility_graph2(civility_plot)
-    # km_plot: plt.Figure= graphs.create_km_graph(survival_dfs) 
-    # forrest_plot: plt.Figure = graphs.create_hr_forrest(cox_models)
+    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
+    stats.get_hate_source(dfs)
+    stats.dump_to_json()
+    stats.get_watchtime(dfs)
+    stats.dump_to_json()
 
-    # graphs.get_graph_report(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
-    # graphs.get_graph_report(civility_plot)
-    # graphs.export_png(politics_t_plot, civility_plot, km_plot, data_availability, forrest_plot, alt_civ_plot)
-    # graphs.export_png(civility_plot)
-    #
-    # prep.test(dfs[0])
-    # prep.hate_pred(dfs[0])
-    # results = prep.hate_source(civility_dfs)
-    # results.to_csv('binomial_civ.csv')
+    robust.robustness_hate_source(dfs)
 
 
-class PrepareData():
+class Preprocess:
     def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance', impolitenessColumnName='impoliteness'):
-        self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
         self.political_events = {
             'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
             'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
@@ -133,169 +64,6 @@ class PrepareData():
         self.intoleranceColumnName: str = intoleranceColumnName
         self.impolitenessColumnName: str = impolitenessColumnName
 
-    def hate_source(self, dfs):
-        results = {}
-        for i, df_hate in dfs:
-            local_results = []
-            for comparison in ["Alternative", "Legacy"]:
-                model_df = df_hate[df_hate["official"].isin(["Unknown", comparison])].copy()
-                model_df["source_binary"] = (model_df["official"] == comparison).astype(int)
-
-                model = Lmer("source_binary ~ 1 + (1|user_id)", data=model_df, family="binomial")
-
-                fit = model.fit()
-                coef = fit.coefs.loc["Intercept"]
-                results.append({
-                    "comparison": comparison,
-                    "estimate": coef["Estimate"],
-                    "p_value": coef["P-val"],
-                    "odds_ratio": np.exp(coef["Estimate"]),
-                    "ci_lower": np.exp(coef["2.5_ci"]),
-                    "ci_upper": np.exp(coef["97.5_ci"])
-                })
-            results[i] = local_results
-
-        return pd.DataFrame(results)
-
-    def hate_pred(self, df):
-        df['high_hate'] = (df['intolerance'] > 5).astype(int)
-        df = df[df['watch_time_s'] > 3]
-
-        df['prop_watched'] = (df['watch_time_s'] / df['video_duration']).clip(0, 1)
-        df['log_watch'] = np.log1p(df['prop_watched'])
-
-        df['next_high_int'] = (df.groupby('user_id')['high_hate'].shift(-1))
-        df_model = df.dropna(subset=['next_high_int']).reset_index(drop=True)
-        df_model['next_high_int'] = (df_model['next_high_int'].astype(int))
-
-        model = BinomialBayesMixedGLM.from_formula("next_high_int ~ high_hate + log_watch",
-            {"user": "0 + C(user_id)"}, df_model)
-        result = model.fit_vb()
-
-        print(result.summary())
-
-    def test(self, df):
-        # still need to add impoliteness
-        df['high_hate'] = (df['intolerance'] > 5.5).astype(int)
-        df_hate = df[df['high_hate'] == 1]
-
-        """
-        Even wilder alg idea
-        """
-        def pred():
-            df = df[df['watch_time_s'] > 3]
-            df['prop_watched'] = df['watch_time_s'] / df['video_duration'].clip(0, 1)
-            df['log_watch'] = np.log1p(df['prop_watched'])
-            df['next_high_int'] = (df.groupby('user_id')['high_hate'].shift(-1))
-            df_model = df.dropna(subset=['next_high_int']).reset_index(drop=True)
-            df_model['next_high_int'] = (df_model['next_high_int'].astype(int))
-            df_model = df_model.dropna(subset=['next_high_int', 'high_hate', 'log_watch', 'user_id']).reset_index(drop=True)
-
-            model = BinomialBayesMixedGLM.from_formula('next_high_int ~ high_int * log_watch', 
-                                                    {'user': '0 + C(user_id)'}, df_model)
-            results = model.fit_vb()
-            print(results.summary())
-        """
-        Wild alg recommend idea
-        """
-        df = df[df['topic'] == 'News, Politics & Societal Issues'].sort_values(['user_id', 'timestamp'])
-        df['next_int'] = (df.groupby('user_id')['intolerance'].shift(-1))
-        df['exposure'] = (df['intolerance'] * np.log1p(df['watch_time_s']))
-        df['prop_watched'] = df['watch_time_s'] / df['video_duration']
-        df['log_watch'] = np.log1p(df['prop_watched'])
-        df = df.dropna(subset=['next_int']).reset_index(drop=True)
-        
-        model = mixedlm('next_int ~ intolerance * log_watch', data=df, groups=df['user_id'])
-        results = model.fit()
-        print(results.summary())
-        
-        """
-        Hate distribution heatmap
-        """
-        df['int_rounded'] = df['intolerance'].apply(lambda x: np.round(x, decimals=0))
-
-        exposure_matrix = (df.groupby(['user_id', 'int_rounded']).size().unstack(fill_value=0))
-        exposure_matrix = exposure_matrix.div(exposure_matrix.sum(axis=1), axis=0)
-
-        sns.heatmap(exposure_matrix, cmap='viridis')
-        plt.xlabel("intolerance Rating")
-        plt.ylabel("Participant")
-        plt.title("Exposure to Intolerance per Participant")
-        plt.show()
-
-        """
-        Hate distribution vervolg
-        """
-        z = linkage(exposure_matrix.drop(columns='cluster', errors='ignore'), method='ward')
-        plt.figure(figsize=(10, 5))
-        dendrogram(z)
-        plt.title("Participant similarity based on intolerance exposure")
-        plt.xlabel("Participants")
-        plt.ylabel("Distance")
-        plt.show()
-
-        clusters = fcluster(z, t=3, criterion='maxclust')
-        reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, random_state=42)
-        embedding = reducer.fit_transform(exposure_matrix)
-
-        umap_df = pd.DataFrame({'UMAP1': embedding[:, 0], 'UMAP2': embedding[:, 1], 'cluster': clusters, 'user_id': exposure_matrix.index})
-        plt.figure(figsize=(8, 6))
-        sns.scatterplot(data=umap_df, x='UMAP1', y='UMAP2', hue='cluster', palette='viridis', s=80)
-        plt.title("Participant clusters based on intolerance exposure profiles")
-        plt.xlabel("UMAP dimension 1")
-        plt.ylabel("UMAP dimension 2")
-        plt.legend(title="Cluster")
-        plt.show()
-
-        """
-        Exposure Plot
-        """
-        user_exposure = (df.groupby('user_id').agg(total_videos=('unique_id', 'size'), hateful_videos=('high_hate', 'sum')).reset_index())
-        user_exposure['hate_ratio'] = (user_exposure['hateful_videos'] / user_exposure['total_videos'])
-
-        fig_exp = plt.figure(figsize=(8,5))
-        sns.histplot(data=user_exposure, x='hate_ratio', bins=20)
-        plt.xlabel("Proportion of High Hate Videos")
-        plt.ylabel("Number of participants")
-        plt.title("Distribution of hateful content exposure across participants")
-        plt.show()
-        
-        """
-        Pareto Plot 
-        """
-
-        author_exposure = (df_hate.groupby(['unique_id', 'official']).agg(
-            exposures=('user_id', 'size'), 
-            unique_users=('user_id', 'nunique'), 
-            hateful_videos=('unique_id', 'nunique')).reset_index())
-
-        author_exposure = (author_exposure.sort_values('exposures', ascending=False).reset_index(drop=True))
-
-        author_exposure['exposure_share'] = (author_exposure['exposures'] / author_exposure['exposures'].sum())
-        author_exposure['cumulative_exposure'] = (author_exposure['exposure_share'].cumsum())
-        author_exposure['rank'] = (author_exposure.index + 1)
-
-        colors = {
-            0.0: "#D55E00",  # Niche
-            1.0: "#009E73",  # Legacy
-            2.0: "#001158"   # Alternative
-        }
-        fig, ax1 = plt.subplots(figsize=(14,6))
-
-        ax1.bar(author_exposure['rank'], author_exposure['exposures'], color=author_exposure['official'].map(colors))
-        ax1.set_xlabel("Video Creators by Hateful Exposure")
-        ax1.set_ylabel("Number of Participant Exposures to Hateful Content")
-
-        ax2 = ax1.twinx()
-        ax2.plot(author_exposure['rank'], author_exposure['cumulative_exposure'] * 100, color="#b03aa3")
-        ax2.set_ylabel("Cumulative Share of Hateful Exposure (%)")
-
-        legend = [patches.Patch(color= "#D55E00", label="Unknown"), patches.Patch(color="#009E73", label="Legacy"), patches.Patch(color="#001158", label="Alternative")]
-        ax1.legend(handles=legend)
-        plt.title("Concentration of Hateful News, Politics & Societal Issues Videos Across Creators")
-        plt.show()
-
-        return fig_exp, fig
 
     """
     Preprocessing for cluster permutation t-test 
@@ -304,7 +72,6 @@ class PrepareData():
     """
     def preprocess_epochs(self, timeSeriesDf: pd.DataFrame, pre_window=14, post_window=3, non_event_window=28) -> (pd.DataFrame, pd.DataFrame):
         df: pd.DataFrame = timeSeriesDf.copy()
-        df['date_ymd'] = pd.to_datetime(df['date_ymd'])
 
         epochs: list[None] | list[pd.DataFrame] = []
         baselines: list[None] | list[pd.DataFrame] = []
@@ -327,179 +94,216 @@ class PrepareData():
         df_epochs = pd.concat(epochs, ignore_index=True)
         df_baseline = pd.concat(baselines, ignore_index=True)
 
-        for d in [df_epochs, df_baseline]:
-            d['is_news'] = (d[self.topicColumnName] == TOPIC).astype(int)
-            d['high_int'] = (d[self.intoleranceColumnName] >= 5).astype(int)
-
-        event_df = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_civility=('high_int', 'sum')).reset_index()
+        event_df = df_epochs.groupby(['user_id', 'event', 'relative_day']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_hate=('high_hate', 'sum')).reset_index()
         event_df['ratio'] = event_df['n_news'] / event_df['n_total']
-        event_df['int_ratio'] = event_df['n_civility'] / event_df['n_news']
+        event_df['hate_ratio'] = event_df['n_hate'] / event_df['n_news']
 
-        baseline = df_baseline.groupby(['user_id', 'event']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_civility=('high_int', 'sum')).reset_index()
+        baseline = df_baseline.groupby(['user_id', 'event']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_hate=('high_hate', 'sum')).reset_index()
         baseline['baseline_ratio'] = baseline['n_news'] / baseline['n_total']
-        baseline['baseline_int_ratio'] = baseline['n_civility'] / baseline['n_news']
+        baseline['baseline_hate_ratio'] = baseline['n_hate'] / baseline['n_news']
 
         return event_df, baseline
 
-    """
-    Preprocessing for channel-level civility independent t-test
-    -> Only take the channels that are preselected (official == 1 or official == 2)
-    -> Group per channel and take the mean
-    NOTE. This method works with the multiverse analysis
-    """
-    def construct_civility(self, timeSeriesDf: pd.DataFrame) -> pd.DataFrame:
-        df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'unique_id', 'official', self.topicColumnName, self.intoleranceColumnName]] #, 'impoliteness']]
+
+class Statistics:
+    def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance', impolitenessColumnName='impoliteness', sentColumnName='sent', subtopicColumnName='subtopic', 
+                 outputName='stats.json'):
+        self.topicColumnName: str = topicColumnName
+        self.sentColumnName: str = sentColumnName
+        self.intoleranceColumnName: str = intoleranceColumnName
+        self.impolitenessColumnName: str = impolitenessColumnName
+        self.subtopicColumnName: str = subtopicColumnName
+
+        self.outputName: str = outputName
+        self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Hate Source':[], 'Timeseries': []}
+        self.political_events = {
+            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
+            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
+            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
+            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
+            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
+            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
+        }
+
+    def get_watchtime(self, dfs):
+        dfs[0].to_csv(BASE_DIR/'survival.csv')
+
+        subprocess.run(["Rscript", str(BASE_DIR/ "src" / "survival.R")], check=True)
+        subprocess.run(["rm", str(BASE_DIR/ "survival.csv")], check=True)
+
+        results = pd.read_csv('survival_results.csv').to_dict()
+        self.jsonContent['Watchtime'].append(results)
+        return results
  
-        df = df[(df[self.topicColumnName] == TOPIC) & (df['official'] != 0)]
-        
-        results: pd.DataFrame = (df.groupby(['unique_id', 'official'], as_index=False). agg(
-            # avg_impoliteness=('impoliteness', 'mean'),
-            avg_intolerance=(self.intoleranceColumnName, 'mean')
-        ))
-        results['official'] = results['official'].astype(int)
+    def get_hate_source(self, dfs):
+        results = {}
+
+        for i, df in enumerate(dfs):
+            df = df[df[self.topicColumnName] == 'News, Politics & Societal Issues']
+            df.to_csv(BASE_DIR/'hate_source.csv')
+
+            subprocess.run(["Rscript", str(BASE_DIR/ "src" / "hate_source.R")], check=True)
+            subprocess.run(["rm", str(BASE_DIR/ "hate_source.csv")], check=True)
+
+            local_results = pd.read_csv('hate_source_results.csv').to_dict()
+            results[i] = local_results
+
+        results['global'] = {
+            'official1_min_p': min(r['p.value'][1] for r in results.values()), 'official1_max_p': max(r['p.value'][1] for r in results.values()),
+            'official2_min_p': min(r['p.value'][2] for r in results.values()), 'official2_max_p': max(r['p.value'][2] for r in results.values()),
+            'intercept_min_p': min(r['p.value'][0] for r in results.values()), 'intercept_max_p': max(r['p.value'][0] for r in results.values()),
+            'official1_min_coef': min(r['estimate'][1] for r in results.values()), 'official1_max_coef': max(r['estimate'][1] for r in results.values()),
+            'official2_min_coef': min(r['estimate'][2] for r in results.values()), 'official2_max_coef': max(r['estimate'][2] for r in results.values()), 
+            'intercept_min_coef': min(r['estimate'][0] for r in results.values()), 'intercept_max_coef': max(r['estimate'][0] for r in results.values()), 
+            'official1_min_OR': min(r['odds_ratio'][1] for r in results.values()), 'official1_max_OR': max(r['odds_ratio'][1] for r in results.values()),
+            'official2_min_OR': min(r['odds_ratio'][2] for r in results.values()), 'official2_max_OR': max(r['odds_ratio'][2] for r in results.values()),
+            'intercept_min_OR': min(r['odds_ratio'][0] for r in results.values()), 'intercept_max_OR': max(r['odds_ratio'][0] for r in results.values()),
+            'official1_min_OR_inv': 1 / min(r['odds_ratio'][1] for r in results.values()), 'official1_max_OR_inv': 1 / max(r['odds_ratio'][1] for r in results.values()),
+            'official2_min_OR_inv': 1 / min(r['odds_ratio'][2] for r in results.values()), 'official2_max_OR_inv': 1 / max(r['odds_ratio'][2] for r in results.values()),
+            'intercept_min_OR_baseChance': (min(r['odds_ratio'][0] for r in results.values())) / (1 + min(r['odds_ratio'][0] for r in results.values())), 
+                'intercept_max_OR_baseChance': (max(r['odds_ratio'][0] for r in results.values())) / (1 + max(r['odds_ratio'][0] for r in results.values())),
+            'official1_min_stat': min(r['statistic'][1] for r in results.values()), 'official1_max_stat': max(r['statistic'][1] for r in results.values()),
+            'official2_min_stat': min(r['statistic'][2] for r in results.values()), 'official2_max_stat': max(r['statistic'][2] for r in results.values()),
+            'intercept_min_stat': min(r['statistic'][0] for r in results.values()), 'intercept_max_stat': max(r['statistic'][0] for r in results.values()),
+            'official1_min_conflow_OR': min(r['conf_low_OR'][1] for r in results.values()), 'official1_max_conf_OR': max(r['conf_high_OR'][1] for r in results.values()),
+            'official2_min_conflow_OR': min(r['conf_low_OR'][2] for r in results.values()), 'official2_max_conf_OR': max(r['conf_high_OR'][2] for r in results.values()),
+            'intercept_min_conflow_OR': min(r['conf_low_OR'][0] for r in results.values()), 'intercept_max_conf_OR': max(r['conf_high_OR'][0] for r in results.values())
+        }
+
+        self.jsonContent['Hate Source'].append(results)
         return results
 
-    def construct_civility2(self, timeSeriesDf: pd.DataFrame) -> pd.DataFrame:
-        df: pd.DataFrame = timeSeriesDf.copy()[['user_id', 'unique_id', 'official', self.topicColumnName, self.intoleranceColumnName]] #, 'impoliteness']]
- 
-        df['high_hate'] = (df['intolerance'] > 5).astype(int)
-        df.loc[df['official'] == 0, 'official'] = 3
+    
+    def get_timeseries(self, politics_t_event_df, politics_t_baseline_df): 
+            results = {}
 
-        analysis_df = df[df['high_hate'] == 1].copy()
-        analysis_df["official"] = analysis_df["official"].map({1: "Legacy", 2: "Alternative", 3: "Unknown"})
-            
-        results: pd.DataFrame = (df.groupby(['user_id', 'official'], as_index=False). agg(
-            # avg_impoliteness=('impoliteness', 'mean'),
-            n_intolerance=('high_hate', 'sum')
-        ))
-        results['official'] = results['official'].astype(int)
-        results['n_total'] = (results.groupby('user_id')['n_intolerance'].transform('sum'))
+            df = politics_t_event_df.merge(politics_t_baseline_df, on=['user_id', 'event'], how='inner')
+            df['c_news_ratio'] = df['ratio'] - df['baseline_ratio']
+            df['c_hate_ratio'] = df['hate_ratio'] - df['baseline_hate_ratio']
+            p_val = {'news': [], 'hate': []}
 
-        results['ratio_int'] = (results['n_intolerance'] /results['n_total'])
+            event_order = df['event'].unique()
 
-        return results, analysis_df
+            for event in event_order:
+                local_results = {}
 
-    """
-    Preprocessing for survival analysis
-    -> Create an event variable (always one after t time since every video is eventually scrolled by
-    -> Only focus on news vs. not news
-    """
-    def construct_survival(self, timeSeriesDf: pd.DataFrame, sentColumnName: str='sent', cutoff: int=3) -> pd.DataFrame:
-        df: pd.DataFrame = timeSeriesDf.copy()[[self.topicColumnName, sentColumnName, 'watch_time_s', 'age', 'video_duration']].assign(event=1)
+                for analysis_type, col in {'news': 'c_news_ratio', 'hate': 'c_hate_ratio'}.items():
+                    df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=col).sort_index(axis=1)
 
-        # RD: A cutoff was set at 3 sec, in line with Meta's policy for Instagram, to count a video as viewed
-        df = df[df['watch_time_s'] >= cutoff]
+                    # RD: participants who were active in the analysis window, but not on a specific day get 0 on their ratios after baseline correction, essentially pre-analysis window mean imputation
+                    df_event = df_event.fillna(0) 
+                    x = df_event.values
 
-        df.loc[df[self.topicColumnName] != TOPIC, self.topicColumnName] = 'Other'
-        return df
-        
-class Graphs():
-    def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance'):
+                    mean_ts = np.mean(x, axis=0)
+
+                    t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
+                    p_val[analysis_type].append(np.min(p) if len(p) > 0 else 1) 
+                    timepoints = df_event.columns.values
+
+                    # This is just for keeping the effect size uncorrected for baseline such that it is interpretable alongside the graph
+                    raw_col = 'ratio' if analysis_type == 'news' else 'hate_ratio'
+                    df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=raw_col).sort_index(axis=1)
+                    mean_ts_raw = np.nanmean(df_event.values, axis=0)
+
+                    local_results[analysis_type] = {'t': t.tolist(), 
+                                                    'clusters': [{'start_day': int(timepoints[c[0].start]), 
+                                                                'end_day': int(timepoints[c[0].stop - 1]), 
+                                                                'max_peak_height': float(np.max(mean_ts_raw[c[0]])), 
+                                                                'auc': float(np.trapezoid(mean_ts[c[0]], x=timepoints[c[0]]))} for c in clusters],  
+                                                    'p': p.tolist()}
+                results[event] = local_results
+
+            for analysis_type in ['news', 'hate']:
+                nope, p_cor, _, _ = multipletests(p_val[analysis_type], method='holm')
+
+                for i, event in enumerate(event_order):
+                    results[event][analysis_type]['significant'] = bool(nope[i])
+                    results[event][analysis_type]['p_corrected'] = float(p_cor[i])
+
+            self.jsonContent['Timeseries'].append(results)
+            return results
+
+    def dump_to_json(self, label=''):
+        print('this is the json content', self.jsonContent)
+        with open(f'{label}stats.json', 'w', encoding='utf-8') as f:
+            json.dump(self.jsonContent, f, indent=4)
+
+class Graphs:
+    def __init__(self, topicColumnName='topic', sentColumnName='sent', intoleranceColumnName='intolerance', impolitenessColumnName='impoliteness', subtopicColumnName='subtopic'):
+        self.topicColumnName: str = topicColumnName
+        self.sentColumnName: str = sentColumnName
+        self.intoleranceColumnName: str = intoleranceColumnName
+        self.impolitenessColumnName: str = impolitenessColumnName
+        self.subtopicColumnName: str = subtopicColumnName
+
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
+        self.fontsize_labels: int = 30
+        self.fontsize_titles: int = 36
+        self.axesticks: int = 26
+
         self.political_events = {
             '2023 Election (NL)' : pd.to_datetime('2023-11-22'),
             'Coalition Plans (NL)': pd.to_datetime('2024-05-16'), 
-            '2024 Election (U.S.)': pd.to_datetime('2024-11-05'),
+            '2024 Election (U.S)': pd.to_datetime('2024-11-05'),
             'Presidential Inauguration': pd.to_datetime('2025-01-20'),
             'Government Fall (NL)' : pd.to_datetime('2025-06-03'), 
             '2025 Election (NL)': pd.to_datetime('2025-10-29')
         }
 
-        self.topicColumnName: str = topicColumnName
-        self.intoleranceColumnName: str = intoleranceColumnName
+    def create_hate_source_graph(self, dfs: list[pd.DataFrame]) -> plt.Figure:
+        preprocessed_dfs = [] 
 
-        self.fontsize_labels: int = 30
-        self.fontsize_titles: int = 36
-        self.axesticks: int = 28
+        for df in dfs:
+            df = df[df['high_hate'] == 1].copy()
+                
+            results: pd.DataFrame = (df.groupby(['user_id', 'official'], as_index=False). agg(
+                n_hate=('high_hate', 'sum')
+            ))
 
-    # TO DO: make the graph nicer    
-    def create_km_graph(self, dfs: list[pd.DataFrame], sentColumnName: str='sent') -> plt.Figure:
-        df: pd.DataFrame = dfs[0]
+            results['official'] = results['official'].astype(int)
+            results['n_total'] = (results.groupby('user_id')['n_hate'].transform('sum'))
 
-        fig, axes = plt.subplots(1, 2, figsize=(40, 20))
+            results['ratio_hate'] = (results['n_hate'] /results['n_total'])
+            preprocessed_dfs.append(results)
 
-        for i, (classification, column) in enumerate({'topic': self.topicColumnName, 'sent': sentColumnName}.items()):
-            ax_classification = axes[i]
+        fig, ax = plt.subplots(1, 1, figsize=(20, 20))
 
-            for idx, (label, df_label) in enumerate(df.groupby(column)):
-                km = KaplanMeierFitter()
+        n_defs = len(preprocessed_dfs)
+        offsets = np.linspace(-0.22, 0.22, n_defs)
 
-                km.fit(durations=df_label['watch_time_s'], event_observed=df_label['event'], label=str(label))
-                km.plot_survival_function(ax=ax_classification, color=list(self.colors.values())[idx])
+        for i, df in enumerate(preprocessed_dfs):
+            summary = (df.groupby("official")["ratio_hate"].agg(mean="mean", sem=lambda x: x.std(ddof=1) / np.sqrt(len(x)))
+                .reindex([1, 2, 3])
+                .reset_index())
 
-            ax_classification.legend(fontsize=30)
+            x = np.arange(3) + offsets[i]
+            t = i / max(n_defs - 1, 1)
+            alpha = 0.2 + (1 - 0.2) * t**5
 
-            ax_classification.set_title(f"Surivival by {classification}", fontsize=self.fontsize_titles)
-            ax_classification.set_xlabel('\nWatch Time (sec)', fontsize=self.fontsize_labels)
-            ax_classification.set_ylabel('Proportion of Video\'s Still Watched', fontsize=self.fontsize_labels)
+            ax.errorbar(x, summary["mean"], yerr=summary["sem"], fmt="o", linestyle="none", capsize=5, color=self.colors["purple"], alpha=alpha, markersize=10,linewidth=2,)
 
-        axes[0].set_xlim(3, 250)
-        axes[0].set_title("Watch Time on TikTok Video's as Seperated by Topic", fontsize=self.fontsize_titles)
-        axes[0].tick_params(axis='both', labelsize=self.axesticks)
- 
-        axes[1].set_xlim(3, 250)
-        axes[1].set_title("Watch Time on TikTok Video's as Seperated by Sentiment\n", fontsize=self.fontsize_titles)
-        axes[1].tick_params(axis='both', labelsize=self.axesticks)
+        ax.set_xticks(np.arange(3))
+        ax.set_xticklabels(["Legacy Channels", "Alternative Channels", "Niche Channels"])
 
-        return fig
+        ax.set_ylabel("Mean Participant Share of High Hate Content", fontsize=self.fontsize_labels)
+        ax.set_xlabel("")
+        ax.set_title("Average Share of High Hate Content by Channel Type\n", fontsize=self.fontsize_titles)
+        ax.tick_params(axis="both", labelsize=self.axesticks)
 
-    def create_hr_forrest(self, cox_models):
-        summary = cox_models['corrected'].summary.copy()
+        plt.tight_layout()
+        plt.show()
+        return fig        
 
-        summary['HR'] = np.exp(summary['coef'])
-        summary["lower"] = np.exp(summary['coef lower 95%'])
-        summary["upper"] = np.exp(summary['coef upper 95%'])
-
-        fig, ax = plt.subplots(figsize=(30, 20))
-        summary = pd.concat([summary.drop(f'topic_{TOPIC}'), summary.loc[[f'topic_{TOPIC}']]])
-        
-        y = np.arange(len(summary))
-
-        for i, (_, row) in enumerate(summary.iterrows()):
-            color = self.colors['dark_blue'] if row.name == f'topic_{TOPIC}' else self.colors['orange']
-            alpha = 1 if row.name == f'topic_{TOPIC}' else 0.8
-
-            ax.errorbar(row['HR'], i, xerr=[[row['HR'] - row['lower']], [row['upper'] - row['HR']]], 
-                        fmt='none', capsize=8, markersize=15, elinewidth=4, linewidth=4, color=color, alpha=0.55)
-
-            ax.scatter(row['HR'], i, s=250, color=color, zorder=3)
-
-        labels = {
-            'topic_News, Politics & Societal Issues': 'News, Politics &\nSocietal Issues', 
-            'video_duration': 'Video Duration', 
-            'sent_Positive': 'Positive Sentiment', 
-            'sent_Negative': 'Negative Sentiment'
-        }
-        summary.index = summary.index.map(lambda x: labels.get(x, x))
-
-        ax.axvline(1, color='grey', linestyle='--', linewidth=3)
-        ax.set_yticks(y)
-        ax.set_yticklabels(summary.index)
-
-        ax.tick_params(axis='both', labelsize=self.axesticks)
-
-        ax.set_xlabel('\nHazard Ratio for Video Disengagement', fontsize=self.fontsize_labels)
-        ax.set_ylabel("")
-        ax.set_title("Hazard Ratio Coefficients for Topic, Sentiment, and Video Duration\n", fontsize=self.fontsize_titles)
-
-        fig.subplots_adjust(left=0.15)
-
-        return fig
-        
-    # TO DO: make the graph nicer
     def create_timeseries_graph(self, timeSeriesDfs) -> plt.Figure: 
         df: pd.DataFrame = timeSeriesDfs[0].copy()
 
-        df['is_news'] = (df[self.topicColumnName] == TOPIC).astype(int)
-        df['high_int'] = (df[self.intoleranceColumnName] >= 5).astype(int)
-
-        per_user: pd.DataFrame = df.groupby(['user_id', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_high_int=('high_int', 'sum')).reset_index()
+        per_user: pd.DataFrame = df.groupby(['user_id', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_total=('is_news', 'count'), n_high_hate=('high_hate', 'sum')).reset_index()
         per_user['ratio'] = per_user['n_news'] / per_user['n_total']
-        per_user['int_ratio'] = per_user['n_high_int'] / per_user['n_news']
+        per_user['hate_ratio'] = per_user['n_high_hate'] / per_user['n_news']
 
         grand_avg: pd.DataFrame = per_user.groupby('date_ymd').agg(mean_ratio=('ratio', 'mean'), sem_ratio=('ratio', lambda x: x.std() / np.sqrt(len(x))), 
                                                     n_users=('user_id', 'nunique'), n_videos=('n_total', 'sum'), 
-                                                     mean_int_ratio=('int_ratio', 'mean'), sem_int_ratio=('int_ratio', lambda x: x.std() / np.sqrt(len(x)))).reset_index()
+                                                     mean_hate_ratio=('hate_ratio', 'mean'), sem_hate_ratio=('hate_ratio', lambda x: x.std() / np.sqrt(len(x)))).reset_index()
  
         transp = (grand_avg['n_users'] - grand_avg['n_users'].min()) / (grand_avg['n_users'].max() - grand_avg['n_users'].min())
         transp = transp.fillna(0.1)
@@ -510,15 +314,15 @@ class Graphs():
         fig, axes = plt.subplots(2, 1, sharex=True, figsize=(40, 20), gridspec_kw={'height_ratios': [2, 2]})
         for i, row in grand_avg.iterrows():
             axes[0].scatter(row['date_ymd'], row['mean_ratio'], color=self.colors['dark_blue'], alpha=transp.iloc[i], s=15)
-            axes[1].scatter(row['date_ymd'], row['mean_int_ratio'], color=self.colors['purple'], alpha=transp.iloc[i], s=15)
+            axes[1].scatter(row['date_ymd'], row['mean_hate_ratio'], color=self.colors['purple'], alpha=transp.iloc[i], s=15)
 
             assert not (row['n_videos'] > 0 and row['n_users'] == 0)
 
 
         axes[0].plot(grand_avg['date_ymd'], grand_avg['mean_ratio'], color=self.colors['dark_blue'], linewidth=2.5)
         axes[0].fill_between(grand_avg['date_ymd'], grand_avg['mean_ratio'] - grand_avg['sem_ratio'], grand_avg['mean_ratio'] + grand_avg['sem_ratio'], color=self.colors['dark_blue'], alpha=0.15)
-        axes[1].plot(grand_avg['date_ymd'], grand_avg['mean_int_ratio'], color=self.colors['purple'], linewidth=2.5)
-        axes[1].fill_between(grand_avg['date_ymd'], grand_avg['mean_int_ratio'] - grand_avg['sem_int_ratio'], grand_avg['mean_int_ratio'] + grand_avg['sem_int_ratio'], color=self.colors['purple'], alpha=0.15)
+        axes[1].plot(grand_avg['date_ymd'], grand_avg['mean_hate_ratio'], color=self.colors['purple'], linewidth=2.5)
+        axes[1].fill_between(grand_avg['date_ymd'], grand_avg['mean_hate_ratio'] - grand_avg['sem_hate_ratio'], grand_avg['mean_hate_ratio'] + grand_avg['sem_hate_ratio'], color=self.colors['purple'], alpha=0.15)
 
         legend = []
         for label, date in self.political_events.items():
@@ -529,12 +333,12 @@ class Graphs():
             axes[1].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=self.axesticks, color=self.colors['green'], transform=axes[1].get_xaxis_transform())
 
         axes[0].set_ylabel('Ratio News in Feed', fontsize=27)
-        axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Intolerance over Time\n", fontsize=self.fontsize_titles)
+        axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Hate over Time\n", fontsize=self.fontsize_titles)
 
         axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
         axes[0].set_ylim(0, 0.3)
 
-        axes[1].set_ylabel('Ratio Intolerant\nNews in Feed', fontsize=self.fontsize_labels)
+        axes[1].set_ylabel('Ratio Hate\nNews in Feed', fontsize=self.fontsize_labels)
         axes[1].set_ylim(0, 0.3)
 
         for ax in axes:
@@ -545,7 +349,7 @@ class Graphs():
         axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
 
         plt.xticks(rotation=45)
-        fig.subplots_adjust(bottom=0.22)
+        fig.subplots_adjust(bottom=0.25)
 
         """
         Data availability for supplement
@@ -571,305 +375,28 @@ class Graphs():
         axes2[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         axes2[0].set_title("Data Availability 2023-2026\n", fontsize=self.fontsize_titles)
 
+        ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
+        axes2[1].set_xticks(ticks)
+        axes2[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
         plt.xticks(rotation=45)
         fig.subplots_adjust(bottom=0.22)
 
         return fig, fig_supplement
-
-    def create_civility_graph(self, dfs: list[pd.DataFrame]) -> plt.Figure:
-        results: list[pd.DataFrame] = dfs
-        fig, axes = plt.subplots(1, 1, figsize=(20,20), sharex=True)
-
-        for i, df in enumerate(results):
-            t = i / max(len(results) - 1, 1)
-            alpha = 0.2 + (1 - 0.2) * t**5
-
-            # sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
-            sns.pointplot(data=df, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes, linewidth=1, alpha=alpha)
-        
-        # combined: pd.DataFrame = pd.concat(results, ignore_index=True)
-        # avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean')) # , avg_impoliteness=('avg_impoliteness', 'mean'))
-
-        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
-        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
-
-        # axes[0].set_ylabel("Average Impoliteness")
-        axes.set_title("Average Civility per Channel Type\n", fontsize=self.fontsize_titles)
-        # axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
-
-        axes.set_ylabel("Average Intolerance", fontsize=self.fontsize_labels)
-        axes.set_xticklabels(["Legacy Channels", "Alternative Channels"])
-        axes.tick_params(axis='both', labelsize=self.axesticks)
-        axes.set_xlabel("")
-        # axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
-        
-    def create_civility_graph2(self, dfs: list[pd.DataFrame]) -> plt.Figure:
-        fig, ax = plt.subplots(1, 1, figsize=(20, 20))
-
-        n_defs = len(dfs)
-        offsets = np.linspace(-0.22, 0.22, n_defs)
-
-        for i, df in enumerate(dfs):
-            summary = (df.groupby("official")["ratio_int"].agg(mean="mean", sem=lambda x: x.std(ddof=1) / np.sqrt(len(x)))
-                .reindex([1, 2, 3])
-                .reset_index())
-
-            x = np.arange(3) + offsets[i]
-            t = i / max(n_defs - 1, 1)
-            alpha = 0.2 + (1 - 0.2) * t**5
-
-            ax.errorbar(x, summary["mean"], yerr=summary["sem"], fmt="o", linestyle="none", capsize=5, color=self.colors["purple"], alpha=alpha, markersize=10,linewidth=2,)
-
-        ax.set_xticks(np.arange(3))
-        ax.set_xticklabels(["Legacy Channels", "Alternative Channels", "Unknown Source"])
-
-        ax.set_ylabel("Ratio of Hateful Videos", fontsize=self.fontsize_labels)
-        ax.set_xlabel("")
-        ax.set_title("Average High Hate Ratio per Channel Type", fontsize=self.fontsize_titles)
-        ax.tick_params(axis="both", labelsize=self.axesticks)
-
-        plt.tight_layout()
-        return fig        
-
-        
-        """
-        Color Gradient Variant
-        """
-        fig2, axes2 = plt.subplots(1, 1, figsize=(20,20), sharex=True)
-        cmap = cm.get_cmap('Purples')
-
-        for i, df in enumerate(results):
-            t = i / max(len(results) - 1, 1)
-            color = cmap(0.3 + 0.7 * t)
-
-            # sns.pointplot(data=df, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['orange'], ax=axes[0])
-            sns.pointplot(data=df, x="official", y="ratio_int", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes2, linewidth=1, alpha=alpha)
-        
-        # combined: pd.DataFrame = pd.concat(results, ignore_index=True)
-        # avg_over_definitions: pd.DataFrame = combined.groupby(['unique_id', 'official'], as_index=False).agg(avg_intolerance=('avg_intolerance', 'mean')) # , avg_impoliteness=('avg_impoliteness', 'mean'))
-
-        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_impoliteness", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[0])
-        # sns.pointplot(data=avg_over_definitions, x="official", y="avg_intolerance", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['dark_blue'], ax=axes[1])
-
-        # axes[0].set_ylabel("Average Impoliteness")
-        axes2.set_title("Average Civility per Channel Type\n", fontsize=self.fontsize_titles)
-        # axes[0].set_yticks(np.arange(avg_over_definitions["avg_impoliteness"].min(), avg_over_definitions["avg_impoliteness"].max(), 0.5))
-
-        axes2.set_ylabel("Average Intolerance", fontsize=self.fontsize_labels)
-        axes2.set_xticklabels(["Legacy Channels", "Alternative Channels"])
-        axes2.tick_params(axis='both', labelsize=self.axesticks)
-        axes2.set_xlabel("")
-        # axes[1].set_yticks(np.arange(avg_over_definitions["avg_intolerance"].min(), avg_over_definitions["avg_intolerance"].max(), 0.5))
-
-        return fig, fig2
-
 
     def get_graph_report(self, *figs: tuple[plt.Figure]) -> None:
         with PdfPages('graphs.pdf') as pdf:
             for fig in figs:
                 pdf.savefig(fig) 
 
-    def export_png(self,  *figs: tuple[plt.Figure]) -> None:
+    def export_png(self,  *figs: tuple[plt.Figure], custom_label='') -> None:
         for i, fig in enumerate(figs):
-            fig.savefig(f'plots/{i}.png', dpi=300)
-
-class Statistics:
-    def __init__(self, outputName: str='stats.json', topicColumnName='topic'):
-        self.outputName: str = outputName
-        self.jsonContent: dict[str, list[str, float]] = {'Descriptives': [], 'Watchtime':[], 'Civility':[], 'Timeseries': []}
-        self.political_events = {
-            'Dutch Election (Schoof I)' : pd.to_datetime('2023-11-22'),
-            'Finalized Coalition Plans Schoof I': pd.to_datetime('2024-05-16'), 
-            'U.S. Election (Trump 2025)': pd.to_datetime('2024-11-05'),
-            'Inauguration and First Day Trump': pd.to_datetime('2025-01-20'),
-            'Fall of Schoof I administration' : pd.to_datetime('2025-06-03'), 
-            'Dutch Election (Jetten I)': pd.to_datetime('2025-10-29')
-        }
-
-        self.topicColumnName: str = topicColumnName
-        
-    def get_descriptives(self, timeSeriesDfs) -> dict[str, dict[str, float]]:
-        df: pd.DataFrame = timeSeriesDfs[0].copy()
-        df['date_ymd'] = pd.to_datetime(df['date_ymd'])
-
-        df['news_politics'] = (df[self.topicColumnName] == TOPIC).astype(int)
-        df['videos_with_transcript'] = (df[self.topicColumnName].notna()).astype(int)
-        for sent in ['Positive', 'Negative', 'Neutral']:
-            df[sent] = (df['sent'] == sent).astype(int)
-
-        per_user_num: pd.DataFrame = df.groupby('user_id').agg(
-            avg_intolerance=('intolerance', 'mean'),
-            # avg_impoliteness=('impoliteness', 'mean'),
-            n_videos=('video_id', 'count'),
-            dates=('date_ymd', lambda x: (x.max() - x.min()).days),
-            n_unique_videos=('video_id', 'nunique'),
-            n_videos_w_transcript=('videos_with_transcript', 'sum'),
-            n_unique_videos_w_transcript=('video_id',  lambda x: x[df.loc[x.index, 'videos_with_transcript'] == 1].nunique()),
-            n_politics=('news_politics', 'sum'),
-            Positive=('Positive', 'sum'), 
-            Negative=('Negative', 'sum'), 
-            Neutral=('Neutral', 'sum'), 
-
-            age=('age', 'last'),
-            political_preference=('political_preference', 'first'),
-
-        )   
-        per_user_num['ratio_news'] = per_user_num['n_politics'] / per_user_num['n_videos']
-        for sent in ['Positive', 'Negative', 'Neutral']:
-            per_user_num[f'ratio_{sent}'] = per_user_num[sent] / per_user_num['n_videos']
-
-        per_user_cat: pd.DataFrame = df.groupby('user_id').agg(gender=('gender', 'first'), education=('education', 'first'))
- 
-        descriptives_num = per_user_num.agg(['mean', 'std', 'median', 'max', 'min', 'count', 'sum']).to_dict()
-        descriptives_cat = {col: per_user_cat[col].value_counts().to_dict() for col in per_user_cat.columns}
-
-        descriptives = {'Numeric': descriptives_num, 'Categorical': descriptives_cat}
-        
-        self.jsonContent['Descriptives'].append(descriptives)
-
-        return descriptives
-
-    """
-    Cluster permutation t-test
-    -> Bonferoni-Holm correction at then end
-    """ 
-    def get_timeseries(self, politics_t_event_df, politics_t_baseline_df): 
-        results = {}
-
-        df = politics_t_event_df.merge(politics_t_baseline_df, on=['user_id', 'event'], how='inner')
-        df['c_news_ratio'] = df['ratio'] - df['baseline_ratio']
-        df['c_int_ratio'] = df['int_ratio'] - df['baseline_int_ratio']
-        p_val = {'news': [], 'int': []}
-
-        event_order = df['event'].unique()
-
-        for event in event_order:
-            local_results = {}
-
-            for analysis_type, col in {'news': 'c_news_ratio', 'int': 'c_int_ratio'}.items():
-                df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=col).sort_index(axis=1)
-
-                # RD: participants who were active in the analysis window, but not on a specific day get 0 on their ratios after baseline correction, essentially pre-analysis window mean imputation
-                df_event = df_event.fillna(0) 
-                x = df_event.values
-
-                mean_ts = np.mean(x, axis=0)
-
-                t, clusters, p, _ = permutation_cluster_1samp_test(x, tail=1, n_permutations=1000, out_type='mask')
-                p_val[analysis_type].append(np.min(p) if len(p) > 0 else 1) 
-                timepoints = df_event.columns.values
-
-                # This is just for keeping the effect size uncorrected for baseline such that it is interpretable alongside the graph
-                raw_col = 'ratio' if analysis_type == 'news' else 'int_ratio'
-                df_event = df[df['event'] == event].pivot(index='user_id', columns='relative_day', values=raw_col).sort_index(axis=1)
-                mean_ts_raw = np.nanmean(df_event.values, axis=0)
-
-                local_results[analysis_type] = {'t': t.tolist(), 
-                                                'clusters': [{'start_day': int(timepoints[c[0].start]), 
-                                                              'end_day': int(timepoints[c[0].stop - 1]), 
-                                                              'max_peak_height': float(np.max(mean_ts_raw[c[0]])), 
-                                                              'auc': float(np.trapezoid(mean_ts[c[0]], x=timepoints[c[0]]))} for c in clusters],  
-                                                'p': p.tolist()}
-            results[event] = local_results
-
-        for analysis_type in ['news', 'int']:
-            nope, p_cor, _, _ = multipletests(p_val[analysis_type], method='holm')
-
-            for i, event in enumerate(event_order):
-                results[event][analysis_type]['significant'] = bool(nope[i])
-                results[event][analysis_type]['p_corrected'] = float(p_cor[i])
-
-        self.jsonContent['Timeseries'].append(results)
-        return results
-
-
-    """
-    Independent t-test for the channel-level civility
-    NOTE. this works with the multiverse analysis
-    """
-    def get_civility(self, civilityDfs) -> dict[str, float]:
-        dfs: pd.DataFrame = civilityDfs
-
-        p_values = {'intolerance': [], 'impoliteness': []}
-        t_values = {'intolerance': [], 'impoliteness': []}
-        d_values = {'intolerance': [], 'impoliteness': []}
-
-        results = {'p_values': p_values, 't_values': t_values, 'd_values': d_values, 'd_mean': {}, 'd_sd': {}, 'd_range': {}, 'p_range': {}}
-
-        for df in dfs:
-            int_results = stats.ttest_ind(df.loc[df['official'] == 1, 'avg_intolerance'], df.loc[df['official'] == 2, 'avg_intolerance'], alternative='less') 
-            # imp_results = stats.ttest_ind(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness'], alternative='less') 
-
-            p_values['intolerance'].append(int_results.pvalue)
-            # p_values['impoliteness'].append(imp_results.pvalue)
-
-            def cohens_d(official, unofficial):
-                n_official, n_unofficial = len(official), len(unofficial)
-                var_official, var_unofficial = official.var(), unofficial.var()
-
-                pooled_sd = np.sqrt(((n_official - 1) * var_official + (n_unofficial - 1) * var_unofficial) / (n_official + n_unofficial - 2))
-                return (official.mean() - unofficial.mean()) / pooled_sd
-
-            d_values['intolerance'].append(cohens_d(df.loc[df['official'] == 1, 'avg_intolerance'], df.loc[df['official'] == 2, 'avg_intolerance']))
-            # d_values['impoliteness'].append(cohens_d(df.loc[df['official'] == 1, 'avg_impoliteness'], df.loc[df['official'] == 2, 'avg_impoliteness']))
-
-            t_values['intolerance'].append(int_results.statistic)
-            # t_values['impoliteness'].append(imp_results.statistic)
-
-        for analysis_type in ['intolerance']: # , 'impoliteness']:
-            d_array = np.array(d_values[analysis_type])
-            p_array = np.array(p_values[analysis_type])
-
-            results['d_mean'][analysis_type] = np.mean(d_array)
-            results['d_sd'][analysis_type] = np.std(d_array)
-            results['d_range'][analysis_type] = (np.min(d_array), np.max(d_array))
-            results['p_range'][analysis_type] = (np.min(p_array), np.max(p_array))
-
-        self.jsonContent['Civility'].append(results)
-
-        return results
-
-    """
-    Cox Regression
-    """
-    def get_survival(self, survival_dfs: pd.DataFrame):
-        df = survival_dfs[0][[self.topicColumnName, 'sent', 'event', 'watch_time_s', 'video_duration']].copy()
-
-        df[self.topicColumnName] = pd.Categorical(df[self.topicColumnName], categories=['Other', TOPIC])
-        df_base = df[[self.topicColumnName, 'event', 'watch_time_s']]
-        df_base = pd.get_dummies(df_base, columns=[self.topicColumnName], drop_first=False)
-
-        df['sent'] = pd.Categorical(df['sent'], categories=['Neutral', 'Negative', 'Positive'])
-        df = pd.get_dummies(df, columns=[self.topicColumnName, 'sent'], drop_first=False)
-
-        # RD: Using Other and Neutral as references
-        df = df.drop(columns=[f'{self.topicColumnName}_Other','sent_Neutral'])
-        df_base = df_base.drop(columns=[f'{self.topicColumnName}_Other'])
-
-        model_summary = {}
-        cox_models = {}
-
-        for analysis_type, analysis_df in {'corrected': df, 'uncorrected': df_base}.items():
-            cph = CoxPHFitter()
-            cph.fit(analysis_df, duration_col='watch_time_s', event_col='event')
-
-            summary = cph.summary.to_dict()
-            model_summary[analysis_type] = summary
-            cox_models[analysis_type] = cph
-
-        self.jsonContent['Watchtime'].append(model_summary)
-
-        return summary, cox_models
-            
-    def dump_to_json(self):
-        with open('stats.json', 'w', encoding='utf-8') as f:
-            json.dump(self.jsonContent, f, indent=4)
+            fig.savefig(f'plots/{custom_label}_{i}.png', dpi=300)
 
  
-
 class DataExtract:
     def __init__(self, database: Database, base_dir=BASE_DIR, topicColumnName='topic', 
-                 sentColumnName='sent', intoleranceColumnName='intolerance', # impolitenessColumnName='impoliteness', 
+                 sentColumnName='sent', intoleranceColumnName='intolerance', impolitenessColumnName='impoliteness', 
                  subtopicColumnName='subtopic'):
         self.database: Database = database
         self.base_dir = base_dir
@@ -877,54 +404,46 @@ class DataExtract:
         self.topicColumnName: str = topicColumnName
         self.sentColumnName: str = sentColumnName
         self.intoleranceColumnName: str = intoleranceColumnName
-        # self.impolitenessColumnName: str = impolitenessColumnName
+        self.impolitenessColumnName: str = impolitenessColumnName
         self.subtopicColumnName: str = subtopicColumnName
 
-    def request_time_series(self, channelOrdering: bool=False, get_qs: bool=False) -> list[pd.DataFrame] | list[pd.DataFrame, ...]:
-        # Add impolitness?
-        classifications: pd.DataFrame = self.database.retrieve_data(tableName='transcript_classification', 
-                                                                    colNames=['video_id', self.topicColumnName, 'translation', self.sentColumnName, self.intoleranceColumnName, self.subtopicColumnName, 'video_duration'])
-        dates: pd.DataFrame = self.database.retrieve_data(tableName='engagements',
-                                                         colNames=['id', 'user_id', 'video_id', 'type', 'date_ymd', 'time_hms'], restrictions='user_id < 2')
+    def request_time_series(self, channel_ordering: bool=False, get_qs: bool=False) -> list[pd.DataFrame]:
+        feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
+                                                              colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
+                                                                        f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
+                                                              restrictions='e.user_id != 119') # participant 119 was excluded due to being to old (age 30)
 
-        videos: pd.DataFrame = self.database.retrieve_data(tableName='videos', colNames=['id AS video_id, author_id'])
+        feed_data = self.format_time(feed_data)
+        feed_data = feed_data[feed_data['topic'].notna()]
 
-        official, unofficial, ordering = self.load_channels() 
-
+        official, unofficial, ordering = self.load_channels()
         channels: pd.DataFrame = self.database.retrieve_data(tableName='authors', colNames=['id AS author_id', 'unique_id'])
-        channels['official'] = np.select([channels['unique_id'].isin(official), channels['unique_id'].isin(unofficial)], [1, 2], default=0)
+        channels['official'] = np.select([channels['unique_id'].isin(official), channels['unique_id'].isin(unofficial)], [1, 2], default=3)
 
-        timeSeriesDf: pd.DataFrame = self.format_time(dates)
-        timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(classifications, on='video_id', how='left') \
-            .merge(videos, on='video_id', how='left') \
-            .merge(channels, on='author_id', how='left')
+        feed_data = feed_data.merge(channels, on='author_id', how='left')
+
+        feed_data['high_hate'] = ((feed_data[self.intoleranceColumnName] >= 5) | (feed_data[self.impolitenessColumnName] >= 5)).astype(int)
+        feed_data['is_news'] = (feed_data[self.topicColumnName] == TOPIC).astype(int)
+        feed_data['date_ymd'] = pd.to_datetime(feed_data['date_ymd'])
 
         if get_qs:
-            qs: pd.DataFrame = self.database.retrieve_data(tableName='questionnaires', colNames=['name', 'age', 'gender', 'education', 'political_preference'])
-            users: pd.DataFrame = self.database.retrieve_data(tableName='users', colNames=['id AS user_id', 'name']).merge(qs, on='name', how='inner')
-            timeSeriesDf: pd.DataFrame = timeSeriesDf.merge(users, on='user_id', how='inner').drop(columns=['name']) 
-            timeSeriesDf = self.rollback_age(timeSeriesDf)
-        
-        # RD: we only take the part that has classifications. We don't use the other video's for now
-        timeSeriesDf = timeSeriesDf[timeSeriesDf['topic'].notna()].copy()
+            qs = self.database.retrieve_data(tableName='questionnaires', colNames=['id AS user_id', 'age'])
+            feed_data = feed_data.merge(qs, on='user_id', how='left')
+            feed_data = self.rollback_age(feed_data)
 
-        print('len original', len(timeSeriesDf))
-        print(timeSeriesDf[['timestamp', 'topic', 'author_id']].head())
-
-        timeSeriesDfs: list[pd.DataFrame, ...] = [timeSeriesDf.copy()]
-
-        if channelOrdering: 
+        feed_data_dfs = [feed_data.copy()]
+        if channel_ordering:
             for n in range(len(ordering)):
-                def_df = timeSeriesDf.copy() 
+                def_df = feed_data.copy() 
+
                 def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
-                timeSeriesDfs.append(def_df)
+                feed_data_dfs.append(def_df)
 
                 assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 7 else 2)
 
-        # timeSeriesDf.to_csv('timeseries.csv')
+        return feed_data_dfs
 
-        return timeSeriesDfs
-        
+ 
     @staticmethod
     def format_time(df: pd.DataFrame, dateColumnName: str='date_ymd', timeColumnName: str='time_hms') -> pd.DataFrame: 
         df['timestamp'] = pd.to_datetime(df[dateColumnName] + ' ' + df[timeColumnName])
@@ -932,8 +451,8 @@ class DataExtract:
         df['next_ts'] = df.groupby('user_id')['timestamp'].shift(-1)
         df['watch_time_s'] = (df['next_ts'] - df['timestamp']).dt.total_seconds().fillna(0)
         
-        # RD: a new session is defined after 5 min without scrolling
-        df['new_session'] = (df['watch_time_s'] >= 300).astype(int)
+        # RD: a new session is defined after 7.5 min without scrolling
+        df['new_session'] = (df['watch_time_s'] >= 450).astype(int)
         df.loc[df.groupby('user_id').tail(1).index, 'new_session'] = 2
         
         # RD: drop the 'new_session != 0' rows. At those points the watch_time_s is not accurate (artificially large)
@@ -955,34 +474,151 @@ class DataExtract:
         
         return channels['official'], channels['unofficial'], channels['ordering']
 
+class Robustness:
+    def __init__(self, database: Database, topicColumnName='topic', intoleranceColumnName='topic', impolitenessColumnName='impoliteness'):
+        self.topicColumnName: str = topicColumnName
+        self.intoleranceColumnName: str = intoleranceColumnName
+        self.impolitenessColumnName: str = impolitenessColumnName
 
-    # When you run this, convert row values to int in the Database() class
-    # I am aware of how horrible the solution is, but for now it's fine until I think of something more permanent :( 
-    def extract_duration(self):
-        batch_size=1000
-        while True:
-            duration_df = self.database.retrieve_data(tableName='transcript_classification tc INNER JOIN videos_raw v ON v.id=tc.video_id', 
-                                                    colNames=['tc.id', 'v.video_data_zstd AS video_duration'], restrictions='tc.video_duration IS NULL',
-                                                    batch_size=batch_size, orderby='tc.id ASC') 
-            if duration_df.empty:
-                break
+        self.database: Database = database
 
-            duration_df['video_duration'] = duration_df['video_duration'].apply(self.decode_json)
-            
-            self.database.update_data(tableName='transcript_classification', data=duration_df)
-             
-    @staticmethod
-    def decode_json(compressed_string):
-        dctx = zstd.ZstdDecompressor()
-        decompressed = dctx.decompress(compressed_string)
-        raw_json = json.loads(decompressed.decode("utf-8")) 
+    def robustness_hate_source(self, dfs):
+        definitions = ['user_exposures', 'reach', 'avg_users', 'followers']
 
-        if "video" in raw_json and "duration" in raw_json["video"]:
-            duration = raw_json["video"]["duration"]
+        for label in definitions:
+            self.get_top500(dfs, label)
+ 
+    def get_top500(self, dfs, label):
+        stats = Statistics()
+        graphs = Graphs()
+
+        dfs = [self.switch_alternative_label(df, label) for df in dfs]
+
+        robust_hate_source = graphs.create_hate_source_graph(dfs)
+        follower_graph = self.get_followers(dfs[0])
+        graphs.export_png(robust_hate_source, follower_graph, custom_label=f'robust_{label}')
+
+        stats.get_hate_source(dfs)
+        stats.dump_to_json(label=f'robustness/{label}')
+
+    def switch_alternative_label(self, df, label):
+        official = df.loc[df['official'] == 1, 'unique_id'].to_list()
+        official_sql = "(" + ",".join(f"'{x}'" for x in official) + ")"
+
+        if label == 'user_exposures':
+            definition = self.define_exposure(official_sql)
+        elif label == 'reach':
+            definition = self.define_reach(official_sql)
+        elif label == 'followers':
+            definition = self.define_followers(official_sql)
         else:
-            duration = None 
+            definition = self.define_avg_audience(official_sql)
 
-        return int(duration)
+        with sqlite3.connect(BASE_DIR/'database/150_db.sqlite3') as db:
+            top_channels = pd.read_sql(definition, db)
 
+        top_channel_ids = set(top_channels['unique_id'])
+
+        local_df = df.copy()
+        local_df.loc[local_df['unique_id'].isin(top_channel_ids), 'official'] = 2
+        local_df.loc[(~local_df['unique_id'].isin(top_channel_ids)) & (local_df['official'] == 2), 'official'] = 3
+        return local_df
+
+    # Popularity is defined as user exposures: each unique combination of a user and watched news vid from a channel is 1 exposure
+    @staticmethod
+    def define_exposure(official_sql):
+        return f"""
+            SELECT unique_id, COUNT(*) AS user_video_exposures FROM (
+                SELECT DISTINCT e.user_id, e.video_id, a.unique_id 
+                FROM engagements e JOIN videos v ON e.video_id = v.id
+                JOIN transcript_classification tc ON e.video_id = tc.video_id
+                JOIN authors a ON v.author_id = a.id WHERE tc.topic = 'News, Politics & Societal Issues')
+            WHERE unique_id NOT IN {official_sql}
+            GROUP BY unique_id
+            ORDER BY user_video_exposures DESC
+            LIMIT 500;
+        """
+
+    # popularity is defined as reach -> how many unique users did this channels reach with their news videos
+    @staticmethod
+    def define_reach(official_sql):
+        return f"""
+            SELECT unique_id, COUNT(DISTINCT user_id) AS unique_users FROM (
+                SELECT DISTINCT e.user_id, e.video_id, a.unique_id 
+                FROM engagements e 
+                JOIN videos v ON e.video_id = v.id
+                JOIN transcript_classification tc ON e.video_id = tc.video_id
+                JOIN authors a ON v.author_id = a.id WHERE tc.topic = 'News, Politics & Societal Issues')
+            WHERE unique_id NOT IN {official_sql}
+            GROUP BY unique_id
+            ORDER BY unique_users DESC
+            LIMIT 500;
+            """
+
+    # popularity as defined by average users that watched each news video from the channel
+    @staticmethod
+    def define_avg_audience(official_sql):
+       return f"""
+            SELECT unique_id, CAST(COUNT(*) AS FLOAT) / COUNT(DISTINCT video_id) AS avg_users_per_video
+            FROM (SELECT DISTINCT e.user_id, e.video_id, a.unique_id 
+                FROM engagements e 
+                JOIN videos v ON e.video_id = v.id
+                JOIN transcript_classification tc ON e.video_id = tc.video_id
+                JOIN authors a ON v.author_id = a.id WHERE tc.topic = 'News, Politics & Societal Issues')
+            WHERE unique_id NOT IN {official_sql}
+            GROUP BY unique_id
+            ORDER BY avg_users_per_video DESC
+            LIMIT 500;
+        """         
+
+    # Popularity is defined by follower_count
+    @staticmethod
+    def define_followers(official_sql):
+        return f"""
+            SELECT a.unique_id, a.follower_count
+            FROM authors a
+            WHERE a.id IN (SELECT DISTINCT v.author_id
+                FROM videos v 
+                JOIN transcript_classification tc ON v.id = tc.video_id
+                WHERE tc.topic = 'News, Politics & Societal Issues')
+            AND a.unique_id NOT IN {official_sql}
+            ORDER BY follower_count DESC
+            LIMIT 500;
+        """
+
+    def get_followers(self, df):
+        high_hate: pd.DataFrame = df[df['high_hate'] == 1]
+
+        alternative_sources = high_hate[high_hate['official'] == 2]
+        niche_sources = high_hate[high_hate['official'] == 3]
+
+        get_followers = self.database.retrieve_data(tableName='authors', colNames=['id AS author_id', 'follower_count'])
+        alternative_sources = alternative_sources.merge(get_followers, on='author_id', how='left').sort_values(by=['follower_count'], ascending=False)
+        niche_sources = niche_sources.merge(get_followers, on='author_id', how='left').sort_values(by=['follower_count'], ascending=False)
+
+        fig, ax = plt.subplots(1, 1, figsize=(40, 20))
+        
+        x_alt = np.arange(len(alternative_sources))
+        x_niche = np.arange(len(niche_sources)) + len(alternative_sources) + 5
+                
+        ax.bar(x_alt, alternative_sources['follower_count'], label='alternative')
+        ax.bar(x_niche, niche_sources['follower_count'], label='niche')
+
+        ax.set_ylim(min(alternative_sources['follower_count'].min(), niche_sources['follower_count'].min()), 
+                    max(alternative_sources['follower_count'].max(), niche_sources['follower_count'].max()) * 1.1)
+
+        ax.text(x_alt.mean(), 
+                max(alternative_sources['follower_count'].max(), niche_sources['follower_count'].max()) * 1.1, 
+                f"Median: {alternative_sources['follower_count'].median():,.0f}",ha="center", fontsize=14, fontweight="bold")
+
+        ax.text(x_niche.mean(), 
+                max(alternative_sources['follower_count'].max(), niche_sources['follower_count'].max()) * 1.1, 
+                f"Median: {niche_sources['follower_count'].median():,.0f}",ha="center", fontsize=14, fontweight="bold")
+
+        ax.set_xticks([])
+
+        return fig
+        
+     
 if __name__=='__main__':
     main()

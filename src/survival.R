@@ -72,6 +72,8 @@ write_results <- function(ml_cox_fit){
   results$CI_lower <- exp(results$coef - 1.96 * results$`se(coef)`)
   results$CI_upper <- exp(results$coef + 1.96 * results$`se(coef)`)
   
+  print(results$CI_lower)
+
   write.csv(results, 'survival_results.csv', row.names = FALSE)
 }
 
@@ -84,6 +86,14 @@ df <- define_event(load_data())
 ml_cox_fit_topic <- ml_cox_randomint(df, 'topic')
 ml_cox_fit_hate <- ml_cox_randomint(df, 'high_hate')
 write_results(ml_cox_fit_topic)
+
+print("CI for high hate, quick print dont judge code prettyness lol")
+s <- summary(ml_cox_fit_hate$corrected_fit)
+ci <- cbind(
+  Lower = exp(s$coefficients[, "coef"] - 1.96 * s$coefficients[, "se(coef)"]),
+  Upper = exp(s$coefficients[, "coef"] + 1.96 * s$coefficients[, "se(coef)"])
+)
+print(ci)
 
 # -----------------------------------------------------
 

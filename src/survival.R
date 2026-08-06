@@ -36,6 +36,8 @@ ml_cox_randomint <- function(df, type){
   print('start uncorrected model')
   print(type)
 
+  # for high hate we make the comparison within news
+  # sorry the code is now so ugly (even though it was already kinda ugly)
   if (type == 'high_hate'){
     df <- df[df$topic == 'News, Politics & Societal Issues', ]
   }

@@ -164,9 +164,9 @@ class Statistics:
             'intercept_min_OR_baseChance': (get_results('odds_ratio', 'intercept')[0]) / (1 + get_results('odds_ratio', 'intercept')[0]), 
                 'intercept_max_OR_baseChance': ((get_results('odds_ratio', 'intercept')[1]) / (1 + get_results('odds_ratio', 'intercept')[1])),
 
-            'intercept_min_conflow_OR': get_results('conf_low_OR', 'intercept')[0], 'intercept_max_conf_OR': get_results('conf_low_OR', 'intercept')[1],
-            'official1_min_conflow_OR': get_results('conf_low_OR', 'legacy')[0], 'official1_max_conf_OR': get_results('conf_low_OR', 'legacy')[1],
-            'official2_min_conflow_OR': get_results('conf_low_OR', 'alternative')[0], 'official2_max_conf_OR': get_results('conf_low_OR', 'alternative')[1],
+            'intercept_min_conflow_OR_inv': 1 / get_results('conf_low_OR', 'intercept')[0], 'intercept_max_conf_OR': 1 / get_results('conf_low_OR', 'intercept')[1],
+            'official1_min_conflow_OR_inv': 1 / get_results('conf_low_OR', 'legacy')[0], 'official1_max_conf_OR': 1 / get_results('conf_low_OR', 'legacy')[1],
+            'official2_min_conflow_OR_inv': 1 / get_results('conf_low_OR', 'alternative')[0], 'official2_max_conf_OR': 1 / get_results('conf_low_OR', 'alternative')[1],
             }
 
         self.jsonContent['Hate Source'].append(results)
@@ -288,6 +288,8 @@ class Graphs:
         ax.set_xlabel("")
         ax.set_title("Average Share of High Hate Content by Channel Type\n", fontsize=self.fontsize_titles)
         ax.tick_params(axis="both", labelsize=self.axesticks)
+
+        ax.set_ylim(0, 1)
 
         plt.tight_layout()
         plt.show()
@@ -482,7 +484,7 @@ class Robustness:
         self.database: Database = database
 
     def robustness_hate_source(self, dfs):
-        definitions = ['user_exposures', 'reach', 'avg_users', 'followers']
+        definitions = ['user_exposures', 'reach', 'avg_users']
 
         for label in definitions:
             self.get_top500(dfs, label)
@@ -569,21 +571,6 @@ class Robustness:
             ORDER BY avg_users_per_video DESC
             LIMIT 500;
         """         
-
-    # Popularity is defined by follower_count
-    @staticmethod
-    def define_followers(official_sql):
-        return f"""
-            SELECT a.unique_id, a.follower_count
-            FROM authors a
-            WHERE a.id IN (SELECT DISTINCT v.author_id
-                FROM videos v 
-                JOIN transcript_classification tc ON v.id = tc.video_id
-                WHERE tc.topic = 'News, Politics & Societal Issues')
-            AND a.unique_id NOT IN {official_sql}
-            ORDER BY follower_count DESC
-            LIMIT 500;
-        """
 
     def get_followers(self, df):
         high_hate: pd.DataFrame = df[df['high_hate'] == 1]

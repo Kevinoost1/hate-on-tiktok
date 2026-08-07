@@ -12,7 +12,7 @@ In main.py you can find an example use for the entire analysis pipeline
 
 - transcripts_to_txt() -> this can be called before classification by choicellm to convert your transcripts column in a pandas dataframe, to a .txt format, required by choicellm. 
     - just pass your dataframe, the name of the column with the transcripts and the name of the column with the video's description elements.
-    - It will then create a 'transcripts.txt for use with choicellm and an id.csv for later merging
+    - It will then create a 'transcripts.txt for use with choicellm and an id.csv for later merging.
 
 - get_results() -> when choicellm is finished with the classification, it will output a 'results.csv'.
     - This function merges the 'results.csv' with your 'id.csv' to ensure proper matching in the database.

@@ -28,23 +28,23 @@ def main():
     stats = Statistics()
     robust = Robustness(db)
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=False)
 
-    politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
-    politics_t_event_dfs = [df[0] for df in politics_t_dfs]
-    politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
+    # politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
+    # politics_t_event_dfs = [df[0] for df in politics_t_dfs]
+    # politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
 
-    politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
-    hate_source_plot = graphs.create_hate_source_graph(dfs)
+    # politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
+    # hate_source_plot = graphs.create_hate_source_graph(dfs)
 
-    graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
-    graphs.export_png(politics_t_plot, hate_source_plot, data_availability)
+    # graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
+    # graphs.export_png(politics_t_plot, hate_source_plot, data_availability)
 
-    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
-    stats.get_hate_source(dfs)
-    stats.dump_to_json()
-    stats.get_watchtime(dfs)
-    stats.dump_to_json()
+    # stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
+    # stats.get_hate_source(dfs)
+    # stats.dump_to_json()
+    # stats.get_watchtime(dfs)
+    # stats.dump_to_json()
 
     robust.robustness_hate_source(dfs)
 
@@ -284,9 +284,9 @@ class Graphs:
         ax.set_xticks(np.arange(3))
         ax.set_xticklabels(["Legacy Channels", "Alternative Channels", "Niche Channels"])
 
-        ax.set_ylabel("Mean Participant Share of High Hate Content", fontsize=self.fontsize_labels)
+        ax.set_ylabel("Mean Ratio of Hate Content", fontsize=self.fontsize_labels)
         ax.set_xlabel("")
-        ax.set_title("Average Share of High Hate Content by Channel Type\n", fontsize=self.fontsize_titles)
+        ax.set_title("Average Ratio of Hate Content by Channel Type\n", fontsize=self.fontsize_titles)
         ax.tick_params(axis="both", labelsize=self.axesticks)
 
         ax.set_ylim(0, 1)
@@ -412,7 +412,7 @@ class DataExtract:
         feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
                                                               colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
-                                                              restrictions='e.user_id != 119') # participant 119 was excluded due to being to old (age 30)
+                                                              restrictions='e.user_id != 119 AND e.user_id < 70') # participant 119 was excluded due to being to old (age 30)
 
         feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]
@@ -440,7 +440,7 @@ class DataExtract:
                 def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
                 feed_data_dfs.append(def_df)
 
-                assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 7 else 2)
+                assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 8 else 2)
 
         return feed_data_dfs
 
@@ -484,7 +484,7 @@ class Robustness:
         self.database: Database = database
 
     def robustness_hate_source(self, dfs):
-        definitions = ['user_exposures', 'reach', 'avg_users']
+        definitions = ['user_exposures']# , 'reach', 'avg_users']
 
         for label in definitions:
             self.get_top500(dfs, label)
@@ -496,18 +496,23 @@ class Robustness:
         dfs = [self.switch_alternative_label(df, label) for df in dfs]
 
         robust_hate_source = graphs.create_hate_source_graph(dfs)
-        follower_graph = self.get_followers(dfs[0])
-        graphs.export_png(robust_hate_source, follower_graph, custom_label=f'robust_{label}')
+        # follower_graph = self.get_followers(dfs[0])
+        graphs.export_png(robust_hate_source, custom_label=f'robust_{label}')
 
         stats.get_hate_source(dfs)
         stats.dump_to_json(label=f'robustness/{label}')
 
     def switch_alternative_label(self, df, label):
         official = df.loc[df['official'] == 1, 'unique_id'].to_list()
-        official_sql = "(" + ",".join(f"'{x}'" for x in official) + ")"
+        official_sql = "(" + ",".join(f"'{x}'" for x in set(official)) + ")"
+
+        unofficial = df.loc[df['official'] == 2, 'unique_id'].to_list()
+        unofficial_sql = "(" + ",".join(f"'{x}'" for x in set(unofficial)) + ")"
+        print(unofficial_sql)
 
         if label == 'user_exposures':
             definition = self.define_exposure(official_sql)
+            print(official_sql)
         elif label == 'reach':
             definition = self.define_reach(official_sql)
         elif label == 'followers':
@@ -523,14 +528,20 @@ class Robustness:
         local_df = df.copy()
         local_df.loc[local_df['unique_id'].isin(top_channel_ids), 'official'] = 2
         local_df.loc[(~local_df['unique_id'].isin(top_channel_ids)) & (local_df['official'] == 2), 'official'] = 3
+
+        get_followers = self.database.retrieve_data(tableName='authors', colNames=['id AS author_id', 'follower_count'])
+        local_df = local_df.merge(get_followers, on='author_id', how='left')
+        local_df.loc[(local_df['official'] == 3) & (local_df['follower_count'] > local_df.loc[local_df['official'] == 2, 'follower_count'].quantile(0.90)), 'official'] = 2
+
+        # local_df.loc[(local_df['official'] == 3) & (local_df['follower_count'] > 338000), 'official'] = 2 # Move all channels with > 338000 followers to alternative
         return local_df
 
     # Popularity is defined as user exposures: each unique combination of a user and watched news vid from a channel is 1 exposure
     @staticmethod
     def define_exposure(official_sql):
         return f"""
-            SELECT unique_id, COUNT(*) AS user_video_exposures FROM (
-                SELECT DISTINCT e.user_id, e.video_id, a.unique_id 
+            SELECT unique_id, follower_count, COUNT(*) AS user_video_exposures FROM (
+                SELECT DISTINCT e.user_id, e.video_id, a.unique_id, a.follower_count
                 FROM engagements e JOIN videos v ON e.video_id = v.id
                 JOIN transcript_classification tc ON e.video_id = tc.video_id
                 JOIN authors a ON v.author_id = a.id WHERE tc.topic = 'News, Politics & Societal Issues')
@@ -544,8 +555,8 @@ class Robustness:
     @staticmethod
     def define_reach(official_sql):
         return f"""
-            SELECT unique_id, COUNT(DISTINCT user_id) AS unique_users FROM (
-                SELECT DISTINCT e.user_id, e.video_id, a.unique_id 
+            SELECT unique_id, follower_count, COUNT(DISTINCT user_id) AS unique_users FROM (
+                SELECT DISTINCT e.user_id, e.video_id, a.unique_id, a.follower_count
                 FROM engagements e 
                 JOIN videos v ON e.video_id = v.id
                 JOIN transcript_classification tc ON e.video_id = tc.video_id
@@ -560,8 +571,8 @@ class Robustness:
     @staticmethod
     def define_avg_audience(official_sql):
        return f"""
-            SELECT unique_id, CAST(COUNT(*) AS FLOAT) / COUNT(DISTINCT video_id) AS avg_users_per_video
-            FROM (SELECT DISTINCT e.user_id, e.video_id, a.unique_id 
+            SELECT unique_id, follower_count, CAST(COUNT(*) AS FLOAT) / COUNT(DISTINCT video_id) AS avg_users_per_video
+            FROM (SELECT DISTINCT e.user_id, e.video_id, a.unique_id, a.follower_count
                 FROM engagements e 
                 JOIN videos v ON e.video_id = v.id
                 JOIN transcript_classification tc ON e.video_id = tc.video_id
@@ -604,6 +615,7 @@ class Robustness:
         ax.set_xticks([])
 
         return fig
+
         
      
 if __name__=='__main__':

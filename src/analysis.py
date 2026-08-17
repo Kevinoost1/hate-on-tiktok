@@ -29,25 +29,25 @@ def main():
     stats = Statistics()
     robust = Robustness(db)
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=False)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
 
-    # politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
-    # politics_t_event_dfs = [df[0] for df in politics_t_dfs]
-    # politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
+    politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
+    politics_t_event_dfs = [df[0] for df in politics_t_dfs]
+    politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
 
     politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
     hate_source_plot = graphs.create_hate_source_graph(dfs)
 
-    # graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
+    graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
     graphs.export_png(politics_t_plot, hate_source_plot, data_availability)
 
-    # stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
-    # stats.get_hate_source(dfs)
-    # stats.dump_to_json()
-    # stats.get_watchtime(dfs)
-    # stats.dump_to_json()
+    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
+    stats.get_hate_source(dfs)
+    stats.dump_to_json()
+    stats.get_watchtime(dfs)
+    stats.dump_to_json()
 
-    # robust.robustness_hate_source(dfs)
+    robust.robustness_hate_source(dfs)
 
 
 class Preprocess:
@@ -282,9 +282,9 @@ class Graphs:
 
             sns.pointplot(data=df, x="official", y="ratio_hate", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes, linewidth=1, alpha=alpha)
         
-        axes.set_title("Average Proportion of Hate by Channel Type\n", fontsize=self.fontsize_titles)
+        axes.set_title("Average Hate Ratio by Channel Type\n", fontsize=self.fontsize_titles)
 
-        axes.set_ylabel("Proportion of Hate", fontsize=self.fontsize_labels)
+        axes.set_ylabel("Average Hate Ratio", fontsize=self.fontsize_labels)
         axes.set_xticklabels(["Legacy Channels", "Alternative Channels", "Niche Channels"])
         axes.tick_params(axis='both', labelsize=self.axesticks)
         axes.spines['top'].set_visible(False)
@@ -545,7 +545,7 @@ class DataExtract:
         feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
                                                               colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
-                                                              restrictions='e.user_id != 119 AND e.user_id < 2') # participant 119 was excluded due to being to old (age 30)
+                                                              restrictions='e.user_id != 119') # participant 119 was excluded due to being to old (age 30)
 
         feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]

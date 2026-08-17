@@ -29,25 +29,25 @@ def main():
     stats = Statistics()
     robust = Robustness(db)
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=False)
 
-    politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
-    politics_t_event_dfs = [df[0] for df in politics_t_dfs]
-    politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
+    # politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
+    # politics_t_event_dfs = [df[0] for df in politics_t_dfs]
+    # politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
 
     politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
     hate_source_plot = graphs.create_hate_source_graph(dfs)
 
-    graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
+    # graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
     graphs.export_png(politics_t_plot, hate_source_plot, data_availability)
 
-    stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
-    stats.get_hate_source(dfs)
-    stats.dump_to_json()
-    stats.get_watchtime(dfs)
-    stats.dump_to_json()
+    # stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
+    # stats.get_hate_source(dfs)
+    # stats.dump_to_json()
+    # stats.get_watchtime(dfs)
+    # stats.dump_to_json()
 
-    robust.robustness_hate_source(dfs)
+    # robust.robustness_hate_source(dfs)
 
 
 class Preprocess:
@@ -287,6 +287,9 @@ class Graphs:
         axes.set_ylabel("Proportion of Hate", fontsize=self.fontsize_labels)
         axes.set_xticklabels(["Legacy Channels", "Alternative Channels", "Niche Channels"])
         axes.tick_params(axis='both', labelsize=self.axesticks)
+        axes.spines['top'].set_visible(False)
+        axes.spines['right'].set_visible(False)
+
         axes.set_xlabel("")
         
         plt.show()
@@ -470,6 +473,8 @@ class Graphs:
 
         for ax in axes:
             ax.tick_params(axis='both', labelsize=self.axesticks)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
 
         ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
         axes[1].set_xticks(ticks)
@@ -540,7 +545,7 @@ class DataExtract:
         feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
                                                               colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
-                                                              restrictions='e.user_id != 119') # participant 119 was excluded due to being to old (age 30)
+                                                              restrictions='e.user_id != 119 AND e.user_id < 2') # participant 119 was excluded due to being to old (age 30)
 
         feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]
@@ -568,7 +573,7 @@ class DataExtract:
                 def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
                 feed_data_dfs.append(def_df)
 
-                assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 8 else 2)
+                # assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 8 else 2)
 
         return feed_data_dfs
 

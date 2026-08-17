@@ -29,7 +29,7 @@ def main():
     stats = Statistics()
     robust = Robustness(db)
 
-    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=False)
+    dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
 
     politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
     politics_t_event_dfs = [df[0] for df in politics_t_dfs]

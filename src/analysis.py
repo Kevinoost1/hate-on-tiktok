@@ -282,9 +282,9 @@ class Graphs:
 
             sns.pointplot(data=df, x="official", y="ratio_hate", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes, linewidth=1, alpha=alpha)
         
-        axes.set_title("Average Hate Ratio by Channel Type\n", fontsize=self.fontsize_titles)
+        axes.set_title("Average Ratio of Total Hate for Legacy and Alternative Across Multiverse Definitions\n", fontsize=self.fontsize_titles)
 
-        axes.set_ylabel("Average Hate Ratio", fontsize=self.fontsize_labels)
+        axes.set_ylabel("Average Ratio of Total Hate", fontsize=self.fontsize_labels)
         axes.set_xticklabels(["Legacy Channels", "Alternative Channels", "Niche Channels"])
         axes.tick_params(axis='both', labelsize=self.axesticks)
         axes.spines['top'].set_visible(False)
@@ -434,9 +434,6 @@ class Graphs:
 
              
 
-
-
-             
 
         """
         Timeseries for paper

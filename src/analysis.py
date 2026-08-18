@@ -43,7 +43,6 @@ def main():
 
     stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
     stats.get_hate_source(dfs)
-    stats.dump_to_json()
     stats.get_watchtime(dfs)
     stats.dump_to_json()
 

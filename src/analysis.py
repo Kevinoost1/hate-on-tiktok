@@ -148,9 +148,14 @@ class Statistics:
             local_results = pd.read_csv('hate_source_results.csv').to_dict()
             results[i] = local_results
 
-        def get_results(result_type, category, mapping_dict={'intercept': 0,'legacy': 1, 'alternative': 2}):
-            return (min(r[result_type][mapping_dict[category]] for r in results.values()), 
-                    max(r[result_type][mapping_dict[category]] for r in results.values()))
+        def get_results(result_type, category, mapping_dict={'intercept': 0,'legacy': 1, 'alternative': 2}, inverted=False):
+            if not inverted:
+                values = [r[result_type][mapping_dict[category]] for r in results.values()]
+            else:
+                values = [1 / r[result_type][mapping_dict[category]] for r in results.values()]
+
+            return min(values), max(values)
+            
 
         # NOTE. we take the inverse OR just for stylistic reasons. In the paper the conclusions are formulated as:
         # niche higher than ..., however the model gives output: ... lower odds than ... Just a matter of where u put the reference in the text
@@ -159,14 +164,14 @@ class Statistics:
             'official1_min_p': get_results('p.value', 'legacy')[0], 'official1_max_p': get_results('p.value', 'legacy')[1],
             'official2_min_p': get_results('p.value', 'alternative')[0], 'official2_max_p': get_results('p.value', 'alternative')[1],
 
-            'official1_min_OR_inv': 1 / get_results('odds_ratio', 'legacy')[0], 'official1_max_OR_inv': 1 / get_results('odds_ratio', 'legacy')[1],
-            'official2_min_OR_inv': 1 / get_results('odds_ratio', 'alternative')[0], 'official2_max_OR_inv': 1 / get_results('odds_ratio', 'alternative')[1],           
+            'official1_min_OR_inv': get_results('odds_ratio', 'legacy', inverted=True)[0], 'official1_max_OR_inv': get_results('odds_ratio', 'legacy', inverted=True)[1],
+            'official2_min_OR_inv': get_results('odds_ratio', 'alternative', inverted=True)[0], 'official2_max_OR_inv': get_results('odds_ratio', 'alternative', inverted=True)[1],           
             'intercept_min_OR_baseChance': (get_results('odds_ratio', 'intercept')[0]) / (1 + get_results('odds_ratio', 'intercept')[0]), 
                 'intercept_max_OR_baseChance': ((get_results('odds_ratio', 'intercept')[1]) / (1 + get_results('odds_ratio', 'intercept')[1])),
 
-            'intercept_min_conflow_OR_inv': 1 / get_results('conf_low_OR', 'intercept')[0], 'intercept_max_conf_OR': 1 / get_results('conf_low_OR', 'intercept')[1],
-            'official1_min_conflow_OR_inv': 1 / get_results('conf_low_OR', 'legacy')[0], 'official1_max_conf_OR': 1 / get_results('conf_low_OR', 'legacy')[1],
-            'official2_min_conflow_OR_inv': 1 / get_results('conf_low_OR', 'alternative')[0], 'official2_max_conf_OR': 1 / get_results('conf_low_OR', 'alternative')[1],
+            'intercept_min_conflow_OR_inv': get_results('conf_low_OR', 'intercept', inverted=True)[0], 'intercept_max_conf_OR_inv': get_results('conf_max_OR', 'intercept', inverted=True)[1],
+            'official1_min_conflow_OR_inv': get_results('conf_low_OR', 'legacy', inverted=True)[0], 'official1_max_conf_OR_inv': get_results('conf_max_OR', 'legacy', inverted=True)[1],
+            'official2_min_conflow_OR_inv': get_results('conf_low_OR', 'alternative', inverted=True)[0], 'official2_max_conf_OR_inv': get_results('conf_max_OR', 'alternative', inverted=True)[1],
             }
 
         self.jsonContent['Hate Source'].append(results)
@@ -281,7 +286,7 @@ class Graphs:
 
             sns.pointplot(data=df, x="official", y="ratio_hate", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes, linewidth=1, alpha=alpha)
         
-        axes.set_title("Average Ratio of Total Hate for Legacy and Alternative Across Multiverse Definitions\n", fontsize=self.fontsize_titles)
+        axes.set_title("Average Ratio of Total Hate for Legacy and Alternative\nAcross Multiverse Definitions\n", fontsize=self.fontsize_titles)
 
         axes.set_ylabel("Average Ratio of Total Hate", fontsize=self.fontsize_labels)
         axes.set_xticklabels(["Legacy Channels", "Alternative Channels", "Niche Channels"])

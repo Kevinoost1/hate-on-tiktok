@@ -169,9 +169,9 @@ class Statistics:
             'intercept_min_OR_baseChance': (get_results('odds_ratio', 'intercept')[0]) / (1 + get_results('odds_ratio', 'intercept')[0]), 
                 'intercept_max_OR_baseChance': ((get_results('odds_ratio', 'intercept')[1]) / (1 + get_results('odds_ratio', 'intercept')[1])),
 
-            'intercept_min_conflow_OR_inv': get_results('conf_low_OR', 'intercept', inverted=True)[0], 'intercept_max_conf_OR_inv': get_results('conf_max_OR', 'intercept', inverted=True)[1],
-            'official1_min_conflow_OR_inv': get_results('conf_low_OR', 'legacy', inverted=True)[0], 'official1_max_conf_OR_inv': get_results('conf_max_OR', 'legacy', inverted=True)[1],
-            'official2_min_conflow_OR_inv': get_results('conf_low_OR', 'alternative', inverted=True)[0], 'official2_max_conf_OR_inv': get_results('conf_max_OR', 'alternative', inverted=True)[1],
+            'intercept_min_conflow_OR_inv': get_results('conf_low_OR', 'intercept', inverted=True)[0], 'intercept_max_conf_OR_inv': get_results('conf_high_OR', 'intercept', inverted=True)[1],
+            'official1_min_conflow_OR_inv': get_results('conf_low_OR', 'legacy', inverted=True)[0], 'official1_max_conf_OR_inv': get_results('conf_high_OR', 'legacy', inverted=True)[1],
+            'official2_min_conflow_OR_inv': get_results('conf_low_OR', 'alternative', inverted=True)[0], 'official2_max_conf_OR_inv': get_results('conf_high_OR', 'alternative', inverted=True)[1],
             }
 
         self.jsonContent['Hate Source'].append(results)

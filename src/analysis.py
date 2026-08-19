@@ -155,7 +155,15 @@ class Statistics:
                 values = [1 / r[result_type][mapping_dict[category]] for r in results.values()]
 
             return min(values), max(values)
-            
+
+        def get_results_ci(category, mapping_dict={'intercept': 0, 'legacy': 1, 'alternative': 2}):
+            conf_lows = [r['conf_low_OR'][mapping_dict[category]] for r in results.values()]
+            conf_highs = [r['conf_high_OR'][mapping_dict[category]]for r in results.values()]
+
+            inverse_ci_lows = [1 / x for x in conf_highs]
+            inverse_ci_highs = [1 / x for x in conf_lows]
+
+            return min(inverse_ci_lows), max(inverse_ci_highs)            
 
         # NOTE. we take the inverse OR just for stylistic reasons. In the paper the conclusions are formulated as:
         # niche higher than ..., however the model gives output: ... lower odds than ... Just a matter of where u put the reference in the text
@@ -169,9 +177,9 @@ class Statistics:
             'intercept_min_OR_baseChance': (get_results('odds_ratio', 'intercept')[0]) / (1 + get_results('odds_ratio', 'intercept')[0]), 
                 'intercept_max_OR_baseChance': ((get_results('odds_ratio', 'intercept')[1]) / (1 + get_results('odds_ratio', 'intercept')[1])),
 
-            'intercept_min_conflow_OR_inv': get_results('conf_low_OR', 'intercept', inverted=True)[0], 'intercept_max_conf_OR_inv': get_results('conf_high_OR', 'intercept', inverted=True)[1],
-            'official1_min_conflow_OR_inv': get_results('conf_low_OR', 'legacy', inverted=True)[0], 'official1_max_conf_OR_inv': get_results('conf_high_OR', 'legacy', inverted=True)[1],
-            'official2_min_conflow_OR_inv': get_results('conf_low_OR', 'alternative', inverted=True)[0], 'official2_max_conf_OR_inv': get_results('conf_high_OR', 'alternative', inverted=True)[1],
+            'intercept_min_conflow_OR_inv': get_results_ci('intercept')[0], 'intercept_max_conf_OR_inv': get_results_ci('intercept')[1],
+            'official1_min_conflow_OR_inv': get_results_ci('legacy')[0], 'official1_max_conf_OR_inv': get_results_ci('legacy')[1],
+            'official2_min_conflow_OR_inv': get_results_ci('alternative')[0], 'official2_max_conf_OR_inv': get_results_ci('alternative')[1],
             }
 
         self.jsonContent['Hate Source'].append(results)

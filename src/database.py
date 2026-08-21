@@ -4,7 +4,6 @@ import time
 import shutil
 from datetime import datetime
 import os
-from dotenv import load_dotenv
 from pathlib import Path
 
 
@@ -83,7 +82,7 @@ class Database:
 
         with self.connect() as conn:
             query = f'''
-            INSERT INTO {tableName} ({colNames}) VALUES ({placeholder})
+            INSERT OR REPLACE INTO {tableName} ({colNames}) VALUES ({placeholder})
             '''
             conn.executemany(query, values)
 
@@ -122,5 +121,16 @@ class Database:
         print('Database copied')
 
 
+if __name__=='__main__':
+    db = Database()
+    
+    conn = sqlite3.connect(BASE_DIR/"database/db.sqlite3")
+    conn.text_factory = bytes
 
-
+    for rowid, data in conn.execute(
+        "SELECT rowid, translation FROM transcript_classification"
+    ):
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            print(f"rowid={rowid}: {e}")

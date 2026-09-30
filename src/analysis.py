@@ -13,7 +13,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-matplotlib.use('Agg')
+matplotlib.use('TkAgg')
 import seaborn as sns
 
 
@@ -30,6 +30,7 @@ def main():
     robust = Robustness(db)
 
     dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
+    hate_diff_threshold = graphs.create_hate_hist(dfs[0])
 
     politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
     politics_t_event_dfs = [df[0] for df in politics_t_dfs]
@@ -38,8 +39,8 @@ def main():
     politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
     hate_source_plot = graphs.create_hate_source_graph(dfs)
 
-    graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability)
-    graphs.export_png(politics_t_plot, hate_source_plot, data_availability)
+    graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
+    graphs.export_png(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
 
     stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
     stats.get_hate_source(dfs)
@@ -261,6 +262,41 @@ class Graphs:
             'Government Fall (NL)' : pd.to_datetime('2025-06-03'), 
             '2025 Election (NL)': pd.to_datetime('2025-10-29')
         }
+                
+    def create_hate_hist(self, df) -> plt.Figure:
+        df = df[df[self.topicColumnName] == TOPIC].copy()
+
+        thresholds = [2, 3, 4, 5, 6]
+        proportions = []
+
+        for threshold in thresholds:
+            high_hate = ((df[self.intoleranceColumnName] >= threshold) | (df[self.impolitenessColumnName] >= threshold))
+            user_proportions = (high_hate.groupby(df['user_id']).mean())
+
+            print(f'hate ratio std at threshold {threshold}', high_hate.groupby(df['user_id']).std())
+            print(f'hate ratio max at threshold {threshold}', high_hate.groupby(df['user_id']).max())
+            print(f'hate ratio min at threshold {threshold}', high_hate.groupby(df['user_id']).min())
+
+            proportions.append(user_proportions.mean())
+
+        fig, ax = plt.subplots(figsize=(40, 40))
+        ax.plot(thresholds, proportions, marker='o', linewidth=2, color=self.colors['purple'])
+
+        for threshold, proportion in zip(thresholds, proportions):
+            ax.annotate(f'{proportion:.1%}', (threshold, proportion), xytext=(8, 5), textcoords='offset points', fontsize=self.axesticks)
+
+        ax.set_title('Average Hate Proportion By Chosen Threshold', fontsize=self.fontsize_titles)
+        ax.set_xlabel('Chosen Hate Threshold', fontsize=self.fontsize_labels)
+        ax.set_ylabel('Average Proportion of\nContent Classified Labeled as Hate', fontsize=self.fontsize_labels)
+
+        ax.set_xticks(thresholds)
+        ax.tick_params(axis='both', labelsize=self.axesticks)
+        ax.set_ylim(0, 1)
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0%}'))
+
+        ax.grid(alpha=0.3)
+
+        return fig
 
     def create_hate_source_graph(self, dfs: list[pd.DataFrame]) -> plt.Figure:
         preprocessed_dfs = [] 
@@ -554,7 +590,7 @@ class DataExtract:
         feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
                                                               colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
-                                                              restrictions='e.user_id != 119') # participant 119 was excluded due to being to old (age 30)
+                                                              restrictions='e.user_id NOT IN (119, 132)') # participant 119 was excluded due to being to old (age 30), 132 was excluded due to having donated only one video from 2020
 
         feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]

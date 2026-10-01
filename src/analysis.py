@@ -13,7 +13,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')
 import seaborn as sns
 
 
@@ -44,7 +44,7 @@ def main():
 
     stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
     stats.get_hate_source(dfs)
-    stats.get_watchtime(dfs)
+    # stats.get_watchtime(dfs)
     stats.dump_to_json()
 
     robust.robustness_hate_source(dfs)
@@ -592,7 +592,7 @@ class DataExtract:
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
                                                               restrictions='e.user_id NOT IN (119, 132)') # participant 119 was excluded due to being to old (age 30), 132 was excluded due to having donated only one video from 2020
 
-        feed_data = self.format_time(feed_data)
+        # feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]
 
         official, unofficial, ordering = self.load_channels()
@@ -600,10 +600,12 @@ class DataExtract:
         channels['official'] = np.select([channels['unique_id'].isin(official), channels['unique_id'].isin(unofficial)], [1, 2], default=3)
 
         feed_data = feed_data.merge(channels, on='author_id', how='left')
-
         feed_data['high_hate'] = ((feed_data[self.intoleranceColumnName] >= 5) | (feed_data[self.impolitenessColumnName] >= 5)).astype(int)
+
+
         feed_data['is_news'] = (feed_data[self.topicColumnName] == TOPIC).astype(int)
         feed_data['date_ymd'] = pd.to_datetime(feed_data['date_ymd'])
+        feed_data = feed_data.sort_values(['user_id', 'date_ymd', 'time_hms'])
 
         if get_qs:
             qs = self.database.retrieve_data(tableName='questionnaires', colNames=['id AS user_id', 'age'])

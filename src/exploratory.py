@@ -12,6 +12,7 @@ from matplotlib.colors import to_rgba
 from matplotlib.patches import Patch
 from scipy.stats import pearsonr
 from statsmodels.stats.multitest import multipletests
+from matplotlib.transforms import blended_transform_factory
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -23,68 +24,6 @@ class Hate_Speech_Target:
         self.fontsize_labels: int = 32
         self.fontsize_titles: int = 36
         self.axesticks: int = 28
-
-        self.category_groups = {
-            # Dutch politics
-            "PVV": ("Dutch Politics", "right"),
-            "FVD": ("Dutch Politics", "right"),
-            "VVD": ("Dutch Politics", "center-right"),
-            "BBB": ("Dutch Politics", "right"),
-            "D66": ("Dutch Politics", "center-left"),
-            "SP": ("Dutch Politics", "left"),
-            "Groen Links PVDA": ("Dutch Politics", "left"),
-            "CDA": ("Dutch Politics", "center-right"),
-            "Denk": ("Dutch Politics", "left"),
-
-            "Geert Wilders": ("Dutch Politics", "right"),
-            "Thierry Baudet": ("Dutch Politics", "right"),
-            "Mark Rutte": ("Dutch Politics", "center-right"),
-            "Frans Timmermans": ("Dutch Politics", "left"),
-            "Jesse Klaver": ("Dutch Politics", "left"),
-            "Rob Jetten": ("Dutch Politics", "center-left"),
-
-            # US politics
-            "Donald Trump": ("US Politics", "right"),
-            "MAGA": ("US Politics", "right"),
-            "Republicans": ("US Politics", "right"),
-            "Joe Biden": ("US Politics", "left"),
-            "Kamala Harris": ("US Politics", "left"),
-            "Democrats": ("US Politics", "left"),
-            "Charlie Kirk": ("US Politics", "right"),
-            "J.D. Vance": ("US Politics", "right"),
-            "Barack Obama": ("US Politics", "left"),
-
-            # Religion
-            "Muslims": ("Religion", None),
-            "Christians": ("Religion", None),
-            "Jewish People": ("Religion", None),
-            "Hindus": ("Religion", None),
-
-            # Refugees
-            "Refugees & Migrants": ("Refugees & Migrants", None),
-
-            # Active Conflict
-            "Gaza": ("Active Conflict", None),
-            "Ukraine": ("Active Conflict", None),
-            "Vladimir Putin": ("Active Conflict", None),
-            "Zelensky": ("Active Conflict", None),
-
-            # Minority Groups
-            "Black People": ("Minority Groups", None),
-            "Moroccans": ("Minority Groups", None),
-            "Turks": ("Minority Groups", None), 
-            "Hispanic People": ("Minority Groups", None),
-            "Disabled & Neurodivergents": ("Minority Groups", None),
-            "Africans": ("Minority Groups", None),
-            "Arab People": ("Minority Groups", None),
-            "Chinese": ("Minority Groups", None),
-            "Asian People": ("Minority Groups", None),
-
-            # LGBTQ
-            "LGBTQ+": ("LGBTQ+ & Gender", None),
-            "Gay People": ("LGBTQ+ & Gender", None),
-            "(Trans)gender": ("LGBTQ+ & Gender", None),
-        }
 
     def construct_freq(self) -> pd.DataFrame:
         df = self.get_hate_speech() 
@@ -100,7 +39,10 @@ class Hate_Speech_Target:
                 freq[cat] += 1
                 freq_df.at[i, cat] += 1
 
-        return freq, freq_df
+        freq, freq_df = self.subdivide_by_channel(freq_df)
+        ratio_freq = self.construct_ratio(freq)
+
+        return ratio_freq, freq_df
 
     def match_words(self, text, keywords) -> Iterator[str]:
         for category, words in self.keywords.items():
@@ -114,23 +56,299 @@ class Hate_Speech_Target:
         return transcript + " " + desc.replace("#", "").strip()
     
     def load_keywords(self) -> dict[str, int]:
-        with open(BASE_DIR/'src/keywords.json', 'r') as f:
+        with open(BASE_DIR/'src/keywords2.json', 'r') as f:
             keywords = json.load(f)
 
         keyword_map = {}
-        for broad_category, specifics in keywords['keywords'].items():
-            for specific, keywords in specifics.items():
-                keyword_map[specific] = [w for w in keywords]
+        for broad_category, keyword in keywords['keywords'].items():
+            keyword_map[broad_category] = [w for w in keyword]
 
         return keyword_map
 
     def get_hate_speech(self) -> pd.DataFrame:
-        db = Database(db_path='/home/kevin/Documents/phd/Project-Data-Donation/database/db.sqlite3')
+        db = Database(db_path=BASE_DIR/'database/150_db.sqlite3')
         return db.retrieve_data(
             tableName = 'transcript_classification tc LEFT JOIN videos v ON tc.video_id=v.id',
-            colNames = ['tc.id', 'tc.translation', 'v.desc'],
-            restrictions = 'tc.impoliteness > 5'
+            colNames = ['tc.id', 'tc.video_id', 'tc.translation', 'v.desc', 'tc.original_language'],
+            restrictions = 'tc.impoliteness >= 5 OR tc.intolerance >= 5'
         ) 
+
+    def subdivide_by_channel(self, freq_df):
+        categories = ['Minority Groups', 'Active Conflict', 'Religion', 'LGBTQ+ & Gender', 'Refugees & Migrants', 'Other']
+        for cat in categories:
+            legacy_col = f'{cat} Legacy'
+            alternative_col = f'{cat} Alternative'
+            niche_col = f'{cat} Niche'
+
+            freq_df[legacy_col] = ((freq_df['official'] == 1) & (freq_df[cat] == 1)).astype(int)
+            freq_df[alternative_col] = ((freq_df['official'] == 2) & (freq_df[cat] == 1)).astype(int)
+            freq_df[niche_col] = ((freq_df['official'] == 3) & (freq_df[cat] == 1)).astype(int)
+
+            freq_df.drop(columns=cat, inplace=True)
+            freq = {col: int(freq_df[col].sum()) for col in freq_df.columns if col not in [
+                    'id', 'video_id', 'original_language', 'translation', 'desc', 'text']}
+
+            return freq, freq_df
+
+
+
+
+    def subdivide_by_language(self, freq_df):
+        categories = ['Minority Groups', 'Active Conflict', 'Religion', 'LGBTQ+ & Gender', 'Refugees & Migrants', 'Other']
+        for cat in categories:
+            dutch_col = f'{cat} Dutch'
+            us_col = f'{cat} US'
+
+            freq_df[dutch_col] = ((freq_df['original_language'] == 18) & (freq_df[cat] == 1)).astype(int)
+            freq_df[us_col] = ((freq_df['original_language'] == 2) & (freq_df[cat] == 1)).astype(int)
+
+            freq_df.drop(columns=cat, inplace=True)
+
+        freq = {col: int(freq_df[col].sum()) for col in freq_df.columns if col not in [
+                'id', 'video_id', 'original_language', 'translation', 'desc', 'text']}
+
+        return freq, freq_df
+
+    def construct_ratio(self, freq):
+        ratio = {}
+
+        dutch = sum(v for k, v in freq.items() if k.endswith('Dutch'))
+        us = sum(v for k, v in freq.items() if k.endswith('US'))
+        total = dutch + us
+
+        ratio['Dutch'] = dutch / total if total else 0
+        ratio['US'] = us / total if total else 0
+
+        for key, value in freq.items():
+            if key.endswith('Dutch'):
+                ratio[key] = value / dutch if dutch else 0
+            elif key.endswith('US'):
+                ratio[key] = value / us if us else 0
+
+        return ratio
+
+    def test_graph(self, ratio_dict):
+
+        #
+        # Language colors
+        #
+        group_colors = {
+            "Dutch": '#ec8e3a',
+            "US": "#001157"
+        }
+
+        #
+        # Category order
+        #
+        categories = [
+            "Politics",
+            "Minority Groups",
+            "Active Conflict",
+            "Religion",
+            "LGBTQ+ & Gender",
+            "Refugees & Migrants",
+            "Other"
+        ]
+
+        #
+        # Construct dataframe
+        #
+        rows = []
+
+        for language in ["Dutch", "US"]:
+
+            for cat in categories:
+
+                if cat == "Politics":
+                    key = f"Politics {language}"
+                else:
+                    key = f"{cat} {language}"
+
+                rows.append({
+                    "label": cat,
+                    "ratio": ratio_dict[key],
+                    "language": language
+                })
+
+        df = pd.DataFrame(rows)
+
+        #
+        # Y positions
+        #
+        y_positions = []
+        current_y = 0
+        language_positions = {}
+
+        for language in ["Dutch", "US"]:
+
+            start = current_y
+
+            for _ in range(len(categories)):
+                y_positions.append(current_y)
+                current_y += 1
+
+            end = current_y - 1
+            language_positions[language] = (start, end)
+
+            # whitespace between Dutch and US
+            current_y += 1
+
+
+        fig, ax = plt.subplots(figsize=(40, 26))
+
+
+        #
+        # Background language bars
+        #
+        for language, (start, end) in language_positions.items():
+
+            midpoint = (start + end) / 2
+
+            ax.barh(
+                midpoint,
+                ratio_dict[language],
+                height=(end - start) + 1.15,
+                color=group_colors[language],
+                alpha=0.14,
+                zorder=0
+            )
+
+
+        #
+        # Individual category bars
+        #
+        for y, (_, row) in zip(y_positions, df.iterrows()):
+
+            ax.barh(
+                y,
+                row["ratio"],
+                color=group_colors[row["language"]],
+                height=0.60,
+                zorder=2
+            )
+
+
+        #
+        # Ratio labels for categories
+        #
+        for y, (_, row) in zip(y_positions, df.iterrows()):
+
+            ax.text(
+                row["ratio"] + 0.01,
+                y,
+                f"{row['ratio']:.2f}",
+                fontsize=self.axesticks,
+                va="center"
+            )
+
+        label_transform = blended_transform_factory(
+            ax.transAxes,   # x in axes coordinates (0-1)
+            ax.transData    # y in data coordinates
+        )
+        #
+        # Language section labels
+        #
+        for language, (start, end) in language_positions.items():
+
+            midpoint = (start + end) / 2
+
+            ax.text(
+                0.7,
+                midpoint,
+                language,
+                transform=label_transform,
+                ha="left",
+                va="center",
+                fontsize=self.axesticks,
+                fontweight="bold",
+                clip_on=False
+            )
+
+            ax.text(
+                0.81,
+                midpoint,
+                f"{ratio_dict[language]:.2f}",
+                transform=label_transform,
+                ha="left",
+                va="center",
+                fontsize=self.axesticks,
+                fontweight="normal",
+                clip_on=False
+            )
+        #
+        # Y labels
+        #
+        ax.set_yticks(y_positions)
+        ax.set_yticklabels(
+            df["label"],
+            fontsize=self.axesticks
+        )
+
+        ax.invert_yaxis()
+
+
+        #
+        # Titles
+        #
+        ax.set_xlabel(
+            "\nRatio of Subtopic Appearance",
+            fontsize=self.fontsize_labels
+        )
+
+        ax.set_title(
+            "\nSubtopics in Hate Speech\nby National Context",
+            fontsize=self.fontsize_titles,
+            pad=18
+        )
+
+
+        ax.tick_params(
+            axis="x",
+            labelsize=self.axesticks
+        )
+
+
+        sns.despine(left=True)
+
+
+        #
+        # Layout
+        #
+        plt.subplots_adjust(
+            left=0.28,
+            right=0.95,
+            top=0.88,
+            bottom=0.15
+        )
+
+
+        fig.savefig(
+            "plots/hate_target_language.png",
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0.25
+        )
+
+
+        plt.show()
+
+        return fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def create_frequency_graph(self, freq_dict: Dict[str, int], top_cat=40) -> plt.Figure():
         freq = pd.Series(freq_dict).sort_values(ascending=False)
@@ -512,7 +730,7 @@ class Hate_Speech_Target:
 
 class Correlation_Matrix:
     def __init__(self):
-        self.db = Database()
+        self.db = Database(db_path=BASE_DIR/'database/150_db.sqlite3')
         self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
 
         self.fontsize_labels: int = 30
@@ -578,7 +796,7 @@ class Correlation_Matrix:
             LEFT JOIN videos v ON v.id=e.video_id
             LEFT JOIN authors a ON a.id=v.author_id
             RIGHT JOIN transcript_classification tc ON tc.video_id = e.video_id
-            WHERE u.id != 119
+            WHERE u.id NOT IN (119, 132) AND u.id > 50
             GROUP BY u.id, u.name
             ORDER BY u.id ASC;
             """ 
@@ -626,130 +844,6 @@ class Correlation_Matrix:
         results['significant_holm'] = reject
         results['corrected_p'] = cor_p
 
-
-        titles = {
-            "age": "Age",
-            "future_anxiety_total": "Future Anxiety",
-            "sr_hate_speech": "Self-reported Hate Speech",
-            "affective_pol": "Perceived Affective Polarization",
-        }
-
-        fig, axes = plt.subplots(2, 2, figsize=(20, 20), sharey=True)
-        axes = axes.flatten()
-
-        fig.suptitle(
-            "Relationships with Encountered Hate in Feed",
-            fontsize=self.fontsize_titles,
-            y=0.80
-        )
-
-        # Transparent orange for CI
-        orange_alpha = to_rgba(self.colors["orange"], alpha=0.25)
-
-        likert_vars = {
-            "future_anxiety_total",
-            "sr_hate_speech",
-            "affective_pol",
-            "age"
-        }
-
-        for i, (ax, var) in enumerate(zip(axes, vars)):
-            local_df = df[["high_hate_ratio", var]].dropna()
-
-            sns.regplot(
-                data=local_df,
-                x=var,
-                y="high_hate_ratio",
-                ax=ax,
-                scatter_kws={
-                    "color": self.colors["purple"],
-                    "alpha": 0.6,
-                    "s": 40,
-                },
-                line_kws={
-                    "color": self.colors["orange"],
-                    "lw": 3,
-                },
-                color=orange_alpha,
-            )
-
-            # Move only x-axis label to the top (keep ticks at bottom)
-            ax.xaxis.set_label_position("top")
-
-            ax.set_xlabel(
-                titles[var],
-                fontsize=self.fontsize_labels,
-                labelpad=15,
-            )
-
-            # Only add y-axis label to the left column
-            if i in [0, 2]:
-                ax.set_ylabel(
-                    "High hate ratio",
-                    fontsize=self.fontsize_labels,
-                )
-            else:
-                ax.set_ylabel("")
-
-            ax.spines["bottom"].set_visible(True)
-            ax.spines["bottom"].set_linewidth(0.8)
-
-            ax.tick_params(
-                axis="both",
-                labelsize=self.axesticks,
-                bottom=True,
-                length=4,
-                width=0.8,
-                color="black"
-            )
-
-            # Integer ticks for Likert variables only
-            if var in likert_vars:
-                ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-
-            # Add Pearson r and significance
-            result_row = results.loc[results["var"] == var].iloc[0]
-
-            r = result_row["cor"]
-            p = result_row["corrected_p"]
-
-            if p < 0.001:
-                stars = "***"
-            elif p < 0.01:
-                stars = "**"
-            elif p < 0.05:
-                stars = "*"
-            else:
-                stars = ""
-
-            ax.text(
-                0.05,
-                0.90,
-                rf"$r$ = {r:.2f}{stars}",
-                transform=ax.transAxes,
-                fontsize=self.axesticks,
-                verticalalignment="top",
-            )
-
-        sns.despine(bottom=False, left=False)
-
-        # Adjust spacing: move top row closer to title and increase row separation
-        plt.subplots_adjust(
-            top=0.74,
-            hspace=0.35
-        )
-
-        fig.savefig(
-            "plots/cor.png",
-            dpi=300,
-            bbox_inches="tight",
-            pad_inches=0.25
-        )
-
-        plt.show()     
-
-
-
         return results
 
     def plot_cor_matrix(self, cor_matrix: pd.DataFrame) -> pd.DataFrame:
@@ -766,12 +860,12 @@ class Correlation_Matrix:
 
 
 if __name__=='__main__':
-    hate_target = Hate_Speech_Target()
+    # hate_target = Hate_Speech_Target()
     cor = Correlation_Matrix()
 
-    freq, freq_df = hate_target.construct_freq()
-    plot = hate_target.create_frequency_graph2(freq)
-    print(freq)
+    # freq, freq_df = hate_target.construct_freq()
+    # plot = hate_target.test_graph(freq)
+    # print(freq)
     
 
     df = cor.get_data()
@@ -780,7 +874,7 @@ if __name__=='__main__':
     # cor_matrix.to_csv('cor_matrix.csv')
     # cor.plot_cor_matrix(cor_matrix)
 
-    specific_cors = cor.specific_cor(df)
-    print(specific_cors.head(10))
+    # specific_cors = cor.specific_cor(df)
+    # print(specific_cors.head(10))
 
 

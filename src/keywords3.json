@@ -1,0 +1,88 @@
+{
+  "keywords": {
+    "Politics": [
+      "wilders", "geert", "geertwilders",
+      "baudet", "thierry", "thierrybaudet", "thiery", "thierybaudet",
+      "rutte", " mark ", "markrutte",
+      "timmerman", "franstimmermans",
+      "klaver", "jesseklaver",
+      "schoof", "dickschoof",
+      "jetten", "robjetten",
+      "dilan", "yesil",
+      "bontenbal", "henrybontenbal",
+      "jimmy", "van dijk", "jimmyvandijk",
+      "lidewij", "de vos",
+      "faber",
+      "omtzigt", "pieteromtzigt",
+      "halsema", "femkehalsema",
+      "keijzer", "mona",
+      "van der plas", "caroline",
+      "pvv", "partij voor de vrijheid", "party of freedom",
+      "fvd", "forum", "forum voor democratie", "forum of democracy",
+      "vvd",
+      "bbb", "boer burger", "farmer civilian",
+      "d66",
+      " sp ", "socialistische partij", "socialist party",
+      " denk ",
+      "groenlinks", " pvda ", "partij voor de arbeid", "party of labor", "labor party", "groenlinkspvda", "green left",
+      " cda ", "christendemocraten", "christian democrats",
+      "trump", "donald", "donaldtrump",
+      "biden", "joe", "joebiden",
+      "kamala", "harris", "kamalaharris",
+      "kirk", "charliekirk",
+      "vance",
+      "clinton",
+      "obama",
+      "maga", "make america great again",
+      "republican",
+      "democrat"
+    ],
+
+  "Minority Groups": [
+      "marok", "moroc",
+      "turk",
+      "suriname", "surinaams",
+      "antilli", "curaçao", "aruba",
+      "afrika", "africa", "sub-sahara", "sub sahara",
+      "arabi", "arab", "kamelen rijder", "camel rider", "brown people",
+      "azia", "asian", "spleetoog", "split eye", "slit eye", "yellow people",
+      "chine",
+      "neger", "niger", "moor", "african american", "niga", "monkey", "zwarte piet", "black piet", " kkk ", "slave", "slaaf",
+      "white people", "pale people", "blacka",
+      "hispanic", "latin", "mexican",
+      "disabled", "handicap", " auti"
+    ],
+
+    "Involved in Active Conflict": [
+      "gaza", "palestin", "from the river to the sea", "watermelon", "israel", "hamas", "west jordan", "west jordaan",
+      "krim", "ukraine", "kyiv",
+      "putin", "vladimir", "poetin", "vladimirpoetin", "vladimirputin",
+      "zelensky"
+    ],
+
+    "Religion": [
+      "moslim", "islam", "moskee", "muslim", "boerka",
+      "jood", "joden", "jew", "zionis", "antisemi",
+      " christen", " christia", "catholic", "katholiek", "protestant",
+      "hindoe", "hindu"
+    ],
+
+    "LGBTQ+ & Gender": [
+      "gender", "trans ", "non-bina", "she male", "travest", "transgender",
+      "lgbt", "lhbt", "queer", "drag queen",
+      "homo", "gay", "lesbi", "fagot", "bisexual"
+    ],
+
+    "Refugees & Migrants": [
+      "vluchteling", "refugee", "statushouder", "asielzoeker", "asylum",
+      "immigrant", "migrant", "foreigner", "buitenlander",
+      "syri", "irak", "afghan"
+    ],
+
+    "Other": [
+      "jongeren", "jeugd", "youth", "teens", "zoomer",
+      "the rich", "rich people", "billionaires", "millionaires", "elite", "upper class", " ceo ",
+      "isis", "taliban", "al queda", "islamic state", "al qaeda"
+    ]
+  }
+}

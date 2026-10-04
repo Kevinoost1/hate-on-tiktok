@@ -335,12 +335,17 @@ class Cross_Ref_Followers():
 
         print("=== Wilcoxon signed-rank test ===")
         print(f"Median is_following_ratio:     {valid['is_following_ratio'].median():.5f}")
+        print(f"Max is_following_ratio:     {valid['is_following_ratio'].max():.5f}")
+        print(f"Min is_following_ratio:     {valid['is_following_ratio'].min():.5f}")
+
         print(f"Median not_following_ratio:    {valid['not_following_ratio'].median():.5f}")
+        print(f"Max not_following_ratio:     {valid['not_following_ratio'].max():.5f}")
+        print(f"Min not_following_ratio:     {valid['not_following_ratio'].min():.5f}")
+
         print(f"V-statistic:                 {stat:.4f}")
         print(f"p-value:                     {p_val:.4f}")
         print(f"\n=== Normality of differences (Shapiro-Wilk) ===")
         print(f"Statistic: {shapiro_stat:.4f}, p-value: {shapiro_p:.4f}")
-        print(f"Note: Shapiro-Wilk is for reference; Wilcoxon does not require normality.")
 
         self.plot_ratio_histogram(valid)
 

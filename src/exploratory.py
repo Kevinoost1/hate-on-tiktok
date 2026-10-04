@@ -6,10 +6,11 @@ import seaborn as sns
 import matplotlib; matplotlib.use('TkAgg'); import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from matplotlib.patches import Patch
-from scipy.stats import f_oneway, pearsonr
+from scipy.stats import f_oneway, pearsonr, shapiro, wilcoxon
 from statsmodels.stats.multicomp import MultiComparison
 from itertools import combinations
 import numpy as np
+import zstandard as zstd
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -277,18 +278,132 @@ class Correlation_Matrix:
         print('p', p)
 
 
+class Cross_Ref_Followers():
+    def __init__(self):
+        self.db = Database(db_path=BASE_DIR/'database/150_db.sqlite3')
+
+
+    def merge_following_vs_non_following(self, user_engagements):
+        user_follower_list = self._compile_follower_list()
+
+        is_following = set(zip(user_follower_list['subject'], user_follower_list['username']))
+        user_engagements['is_following'] = user_engagements.apply(lambda x: int((x['subject'], x['username']) in is_following), axis=1)
+
+        return user_engagements
+
+    def _compile_follower_list(self):
+        return pd.read_csv('following.csv')
+
+    def get_engagements(self, analysis='tc.topic = "News, Politics & Societal Issues"'):
+        query = f"""
+        SELECT a.unique_id AS username, u.name AS subject, e.user_id, COUNT(e.video_id) AS video_count
+        FROM engagements e
+        LEFT JOIN videos v ON v.id = e.video_id
+        LEFT JOIN authors a ON a.id = v.author_id
+        LEFT JOIN transcript_classification tc ON tc.video_id = e.video_id
+        LEFT JOIN users u ON u.id = e.user_id
+        WHERE ({analysis}) AND e.user_id NOT IN (119, 132)
+        GROUP BY e.user_id, a.unique_id
+        ORDER BY e.user_id, video_count DESC;
+        """
+
+        with self.db.connect() as db:
+            df = pd.read_sql(query, db)
+
+        return df
+
+    def compute_ratios(self, user_engagements):
+        df = user_engagements.groupby('user_id').agg(
+            video_count_is_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 1, 'video_count'].sum()),
+            video_count_not_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 0, 'video_count'].sum()),
+            total_video_count=('video_count', 'sum')
+        ).reset_index()
+
+        df['is_following_ratio'] = df['video_count_is_following'] / df['total_video_count']
+        df['not_following_ratio'] = df['video_count_not_following'] / df['total_video_count']
+ 
+        return df
+
+    def execute_wilcoxon_test(self, per_user):
+        """Wilcoxon signed-rank test comparing is_following_ratio vs not_following_ratio."""
+        valid = per_user.dropna(subset=['is_following_ratio', 'not_following_ratio'])
+
+        stat, p_val = wilcoxon(valid['is_following_ratio'], valid['not_following_ratio'])
+
+        diffs = valid['is_following_ratio'] - valid['not_following_ratio']
+        shapiro_stat, shapiro_p = shapiro(diffs)
+
+        print("=== Wilcoxon signed-rank test ===")
+        print(f"Median is_following_ratio:     {valid['is_following_ratio'].median():.5f}")
+        print(f"Median not_following_ratio:    {valid['not_following_ratio'].median():.5f}")
+        print(f"V-statistic:                 {stat:.4f}")
+        print(f"p-value:                     {p_val:.4f}")
+        print(f"\n=== Normality of differences (Shapiro-Wilk) ===")
+        print(f"Statistic: {shapiro_stat:.4f}, p-value: {shapiro_p:.4f}")
+        print(f"Note: Shapiro-Wilk is for reference; Wilcoxon does not require normality.")
+
+        self.plot_ratio_histogram(valid)
+
+        return {'stat': stat, 'p_val': p_val,
+                'shapiro_stat': shapiro_stat, 'shapiro_p': shapiro_p,
+                'n_valid': len(valid)}
+
+    def plot_ratio_histogram(self, per_user):
+        """Histogram of both ratios to check approximate normality."""
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+        colors = {'is_following_ratio': '#001157', 'not_following_ratio': '#ec8e3a'}
+        titles = {'is_following_ratio': 'is_following_ratio',
+                  'not_following_ratio': 'not_following_ratio'}
+
+        for i, (col, ax) in enumerate(zip(colors, axes)):
+            valid = per_user[col].dropna()
+            ax.hist(valid, bins=40, color=colors[col], edgecolor='white', alpha=0.85, density=True)
+
+            kde = sns.kdeplot(x=valid, color='black', linewidth=1.5, ax=ax)
+            ax.axvline(valid.mean(), color='red', linestyle='--', linewidth=1.5,
+                       label=f'mean = {valid.mean():.3f}')
+            ax.set_title(titles[col], fontsize=14)
+            ax.set_xlabel('Ratio')
+            ax.set_ylabel('Density')
+            ax.legend()
+
+            stat, p = shapiro(valid)
+            ax.text(0.05, 0.95, f'Shapiro-Wilk\nstat={stat:.3f}\np={p:.3f}',
+                    transform=ax.transAxes, va='top', fontsize=9,
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+        plt.tight_layout()
+        plt.savefig('plots/ratio_histograms.png', dpi=300, bbox_inches='tight')
+        plt.show()
+
+
+
 if __name__ == '__main__':
-    target = Hate_Speech_Target()
-    target.get_hate_speech()
-    target.add_keyword_columns()
+    # target = Hate_Speech_Target()
+    # target.get_hate_speech()
+    # target.add_keyword_columns()
 
-    ratios = target.compute_user_channel_ratios()
-    results = target.run_anovas(ratios)
+    # ratios = target.compute_user_channel_ratios()
+    # results = target.run_anovas(ratios)
 
-    target.plot_channel_ratios(ratios)
+    # target.plot_channel_ratios(ratios)
 
-    cor = Correlation_Matrix()
-    df = cor.get_data()
-    cor.specific_cor(df)
+    # cor = Correlation_Matrix()
+    # df = cor.get_data()
+    # cor.specific_cor(df)
+
+    fol = Cross_Ref_Followers()
+    user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
+    user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    per_user = fol.compute_ratios(user_engagements)
+    fol.execute_wilcoxon_test(per_user)
+
+    user_engagements = fol.get_engagements(analysis='tc.impoliteness >= 5 OR tc.intolerance >= 5')
+    user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    per_user = fol.compute_ratios(user_engagements)
+    fol.execute_wilcoxon_test(per_user)
+
+
 
 

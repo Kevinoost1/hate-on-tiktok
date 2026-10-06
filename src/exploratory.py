@@ -308,6 +308,10 @@ class Cross_Ref_Followers():
         is_following = set(zip(user_follower_list['subject'], user_follower_list['username']))
         user_engagements['is_following'] = user_engagements.apply(lambda x: int((x['subject'], x['username']) in is_following), axis=1)
 
+        official, unofficial, ordering = self.load_channels()       
+        user_engagements['channel_type'] = np.select([self.data['username'].isin(official), self.data['username'].isin(unofficial)], [1, 2], default=3)
+        self.data.loc[self.data['username'].isin(ordering[str(66)]), 'channel_type'] = 2
+
         return user_engagements
 
     def _compile_follower_list(self):
@@ -332,6 +336,11 @@ class Cross_Ref_Followers():
         return df
 
     def compute_ratios(self, user_engagements):
+        channel_types_following = user_engagements.copy()
+        channel_types_following = channel_types_following.groupby(['user_id', 'channel_type']).agg(
+            count_following=('channel_type', 'count'), total=('video_id', 'count')
+        )
+
         df = user_engagements.groupby('user_id').agg(
             video_count_is_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 1, 'video_count'].sum()),
             video_count_not_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 0, 'video_count'].sum()),
@@ -400,6 +409,15 @@ class Cross_Ref_Followers():
         plt.tight_layout()
         plt.savefig('plots/ratio_histograms.png', dpi=300, bbox_inches='tight')
         plt.show()
+
+    @staticmethod
+    def load_channels(channelDefinitionFileName: str = BASE_DIR / 'src' / 'channel_def.json') -> tuple:
+        with open(channelDefinitionFileName, 'r') as f:
+            channels = json.load(f)
+
+        return channels['official'], channels['unofficial'], channels['ordering']
+
+
 
 
 

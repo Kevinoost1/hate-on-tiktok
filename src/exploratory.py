@@ -149,13 +149,10 @@ class Hate_Speech_Target:
 
         user_avg = ratios.groupby(['user_id', 'channel_type'])[subtopic_cols + ['channel_ratio']].mean()
         channel_df = user_avg.groupby('channel_type').mean().reset_index()
-        # Compute SEMs for error bars
+
         channel_sems = user_avg['channel_ratio'].groupby(
             user_avg.index.get_level_values('channel_type')).sem()
 
-        # Compute SEMs for subtopic bars
-        # user_avg has normalized subtopic ratios per user-channel;
-        # multiply by channel ratio to get user-level contribution
         subtopic_contributions = user_avg[subtopic_cols].copy()
         for col in subtopic_cols:
             subtopic_contributions[col] = subtopic_contributions[col] * user_avg['channel_ratio']
@@ -200,14 +197,14 @@ class Hate_Speech_Target:
             channel_bar_values[channel] = ch_ratio
             ax.barh(midpoint, ch_ratio, height=(end - start) + 1.15, color=channel_colors[channel], alpha=0.14, zorder=0)
             ax.errorbar(ch_ratio, midpoint, xerr=channel_sems[channel], fmt='none',
-                        ecolor=channel_colors[channel], capsize=4, zorder=1)
+                        ecolor=channel_colors[channel], capsize=8, capthick=2, zorder=1)
 
         for y, (_, row) in zip(y_positions, df.iterrows()):
 
             ax.barh(y, row["ratio"], color=channel_colors[row["channel_type"]], height=0.60, zorder=2)
             sem_val = subtopic_sems.loc[row["channel_type"], row["label"]]
             ax.errorbar(row["ratio"], y, xerr=sem_val, fmt='none',
-                        ecolor=channel_colors[row["channel_type"]], capsize=4, zorder=3)
+                        ecolor=channel_colors[row["channel_type"]], capsize=8, capthick=2, zorder=3)
 
         max_bar = max(channel_bar_values.values())
         ax.set_xlim(0, max_bar)
@@ -229,8 +226,8 @@ class Hate_Speech_Target:
         ax.set_yticklabels(df["label"], fontsize=self.axesticks)
         ax.invert_yaxis()
 
-        ax.set_xlabel("\nAverage Share of Total Hate (%)", fontsize=self.fontsize_labels)
-        ax.set_title("\nAverage Share of Total Hate by Channel Type,\n Broken Up by Subtopic", fontsize=self.fontsize_titles, pad=18)
+        ax.set_xlabel("\nAverage Percentage of Total Hate (%)", fontsize=self.fontsize_labels)
+        ax.set_title("\nAverage Percentage of Total Hate by Channel Type,\n Broken Up by Subtopic", fontsize=self.fontsize_titles, pad=18)
         ax.tick_params(axis="x", labelsize=self.axesticks)
 
         sns.despine(left=True)
@@ -355,6 +352,8 @@ class Cross_Ref_Followers():
 
         df = channel_counts.merge(total_counts, on='user_id')
         df['ratio_following'] = df['count_following'] / df['total']
+
+        print(df.groupby('channel_type').mean())
 
         return df
 

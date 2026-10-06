@@ -363,131 +363,6 @@ class Graphs:
         transp = (grand_avg['n_users'] - grand_avg['n_users'].min()) / (grand_avg['n_users'].max() - grand_avg['n_users'].min())
         transp = transp.fillna(0.1)
 
-        def div_by_channel_type():
-            per_user_div = (df.groupby(['user_id', 'official', 'date_ymd']).agg(n_news=('is_news', 'sum'), n_high_hate=('high_hate', 'sum')).reset_index())
-
-            daily_totals = (per_user_div.groupby(['user_id', 'date_ymd']).agg(total_news=('n_news', 'sum'), total_hate=('n_high_hate', 'sum')).reset_index())
-            per_user_div = per_user_div.merge(daily_totals, on=['user_id', 'date_ymd'], how='left')
-
-            per_user_div['ratio'] = (per_user_div['n_news'] / per_user_div['total_news'])
-            per_user_div['hate_ratio'] = (per_user_div['n_high_hate'] / per_user_div['total_hate'])
-
-            grand_avg_div: pd.DataFrame = (per_user_div.groupby(['official', 'date_ymd']).agg(mean_ratio=('ratio', 'mean'), sem_ratio=('ratio', lambda x: x.std() / np.sqrt(len(x))),
-                                                                                              mean_hate_ratio=('hate_ratio', 'mean'), sem_hate_ratio=('hate_ratio', lambda x: x.std() / np.sqrt(len(x))),
-                                                                                              n_users=('user_id', 'nunique'), n_news=('n_news', 'sum'), n_high_hate=('n_high_hate', 'sum')).reset_index())
-
-            print('US election - Legacy, Hate', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-11-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-10-25')) & (
-                  grand_avg_div['official'] == 1), 'mean_hate_ratio')].mean())
-
-            print('US election - Alternative, Hate', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-11-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-10-25')) & (
-                  grand_avg_div['official'] == 2), 'mean_hate_ratio')].mean())
-
-            print('US election - Niche, Hate', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-11-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-10-25')) & (
-                  grand_avg_div['official'] == 3), 'mean_hate_ratio')].mean())
-
-         
-            print('Month Before US election - Legacy, Hate', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-10-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-09-25')) & (
-                  grand_avg_div['official'] == 1), 'mean_hate_ratio')].mean())
-
-            print('Month Before US election - Alternative, Hate', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-10-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-09-25')) & (
-                  grand_avg_div['official'] == 2), 'mean_hate_ratio')].mean())
-
-            print('Month Before US election - Niche, Hate', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-10-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-09-25')) & (
-                  grand_avg_div['official'] == 3), 'mean_hate_ratio')].mean())
-
-
-
-            print('US election - Legacy, News', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-11-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-10-25')) & (
-                  grand_avg_div['official'] == 1), 'mean_ratio')].mean())
-
-            print('US election - Alternative, News', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-11-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-10-25')) & (
-                  grand_avg_div['official'] == 2), 'mean_ratio')].mean())
-
-            print('US election - Niche, News', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-11-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-10-25')) & (
-                  grand_avg_div['official'] == 3), 'mean_ratio')].mean())
-
-         
-            print('Month Before US election - Legacy, News', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-10-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-09-25')) & (
-                  grand_avg_div['official'] == 1), 'mean_ratio')].mean())
-
-            print('Month Before US election - Alternative, News', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-10-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-09-25')) & (
-                  grand_avg_div['official'] == 2), 'mean_ratio')].mean())
-
-
-            print('Month Before US election - Niche, News', grand_avg_div.loc[(
-                  (grand_avg_div['date_ymd'] < pd.to_datetime('2024-10-08')) & (grand_avg_div['date_ymd'] > pd.to_datetime('2024-09-25')) & (
-                  grand_avg_div['official'] == 3), 'mean_ratio')].mean())
-
-
-
-
-            """
-            Test by Channel Type
-            """
-            fig, axes = plt.subplots(2, 1, sharex=True, figsize=(40, 20), gridspec_kw={'height_ratios': [2, 2]})
-            official_colors = {1: self.colors['dark_blue'], 2: 'lightblue', 3: self.colors['orange']}
-
-            for official, group in grand_avg_div.groupby('official'):
-                group = group.sort_values('date_ymd')
-
-                transp = ((group['n_users'] - grand_avg_div['n_users'].min()) / (grand_avg_div['n_users'].max() - grand_avg_div['n_users'].min())).fillna(0.1)
-                color = official_colors[official]
-
-                for i, row in group.iterrows():
-                    alpha = transp.loc[i]
-
-                    axes[0].scatter(row['date_ymd'], row['mean_ratio'], color=color, alpha=alpha, s=15)
-                    axes[1].scatter(row['date_ymd'],row['mean_hate_ratio'], color=color, alpha=alpha,s=15)
-
-                    # assert not (row['n_videos'] > 0 and row['n_users'] == 0)
- 
-                axes[0].plot(group['date_ymd'], group['mean_ratio'], color=color, linewidth=2.5, label=str(official))
-                axes[1].plot(group['date_ymd'], group['mean_hate_ratio'],color=color, linewidth=2.5, label=str(official))
-
-                axes[0].fill_between(group['date_ymd'],group['mean_ratio'] - group['sem_ratio'], group['mean_ratio'] + group['sem_ratio'], color=color, alpha=0.15)
-                axes[1].fill_between(group['date_ymd'], group['mean_hate_ratio'] - group['sem_hate_ratio'], group['mean_hate_ratio'] + group['sem_hate_ratio'], color=color, alpha=0.15)
-
-            for label, date in self.political_events.items():
-                for i, plot in enumerate(axes):
-                    axes[i].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
-                    axes[i].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
-
-                axes[1].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=self.axesticks, color=self.colors['green'], transform=axes[1].get_xaxis_transform())
-
-            axes[0].set_ylabel('Ratio News in Feed', fontsize=27)
-            axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Hate over Time\n", fontsize=self.fontsize_titles)
-            axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
-            axes[0].set_ylim(0, 1)
-
-            axes[1].set_ylabel('Ratio Hate\nNews in Feed', fontsize=self.fontsize_labels)
-            axes[1].set_ylim(0, 1)
-
-            for ax in axes:
-                ax.tick_params(axis='both', labelsize=self.axesticks)
-                ax.legend(fontsize=self.axesticks)
-
-            ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
-            axes[1].set_xticks(ticks)
-            axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-
-            plt.xticks(rotation=45)
-            fig.subplots_adjust(bottom=0.25)
-            plt.show()
-
-             
-
-
         """
         Timeseries for paper
         """
@@ -641,7 +516,6 @@ class DataExtract:
         df['new_session'] = (df['watch_time_s'] >= 450).astype(int)
         df.loc[df.groupby('user_id').tail(1).index, 'new_session'] = 2
         
-        # RD: drop the 'new_session != 0' rows. At those points the watch_time_s is not accurate (artificially large)
         return df
 
     @staticmethod

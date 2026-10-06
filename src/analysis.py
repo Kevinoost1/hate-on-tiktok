@@ -127,7 +127,12 @@ class Statistics:
         }
 
     def get_watchtime(self, dfs):
-        dfs[0].to_csv(BASE_DIR/'survival.csv')
+        df = dfs[0]
+
+        # We can only keep the videos where we can cleanly measure watch time
+        df[df['new_session'] == 0]
+
+        df.to_csv(BASE_DIR/'survival.csv')
 
         subprocess.run(["Rscript", str(BASE_DIR/ "src" / "survival.R")], check=True)
         subprocess.run(["rm", str(BASE_DIR/ "survival.csv")], check=True)
@@ -637,7 +642,7 @@ class DataExtract:
         df.loc[df.groupby('user_id').tail(1).index, 'new_session'] = 2
         
         # RD: drop the 'new_session != 0' rows. At those points the watch_time_s is not accurate (artificially large)
-        return df[df['new_session'] == 0]
+        return df
 
     @staticmethod
     def rollback_age(df: pd.DataFrame, dateColumnName: str='date_ymd') -> pd.DataFrame:

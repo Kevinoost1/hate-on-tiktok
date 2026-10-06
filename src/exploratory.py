@@ -309,8 +309,8 @@ class Cross_Ref_Followers():
         user_engagements['is_following'] = user_engagements.apply(lambda x: int((x['subject'], x['username']) in is_following), axis=1)
 
         official, unofficial, ordering = self.load_channels()       
-        user_engagements['channel_type'] = np.select([self.data['username'].isin(official), self.data['username'].isin(unofficial)], [1, 2], default=3)
-        self.data.loc[self.data['username'].isin(ordering[str(66)]), 'channel_type'] = 2
+        user_engagements['channel_type'] = np.select([user_engagements['username'].isin(official), user_engagements['username'].isin(unofficial)], [1, 2], default=3)
+        user_engagements.loc[user_engagements['username'].isin(ordering[str(66)]), 'channel_type'] = 2
 
         return user_engagements
 
@@ -335,12 +335,7 @@ class Cross_Ref_Followers():
 
         return df
 
-    def compute_ratios(self, user_engagements):
-        channel_types_following = user_engagements.copy()
-        channel_types_following = channel_types_following.groupby(['user_id', 'channel_type']).agg(
-            count_following=('channel_type', 'count'), total=('video_id', 'count')
-        )
-
+    def compute_ratios(self, user_engagements): 
         df = user_engagements.groupby('user_id').agg(
             video_count_is_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 1, 'video_count'].sum()),
             video_count_not_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 0, 'video_count'].sum()),
@@ -349,8 +344,20 @@ class Cross_Ref_Followers():
 
         df['is_following_ratio'] = df['video_count_is_following'] / df['total_video_count']
         df['not_following_ratio'] = df['video_count_not_following'] / df['total_video_count']
+
+        channel_types_following
  
         return df
+
+    def compute_ratios_channel_types(self, user_engagements):
+        channel_counts = user_engagements.groupby(['user_id', 'channel_type']).size().reset_index(name='count_following')
+        total_counts = user_engagements.groupby('user_id').size().reset_index(name='total')
+
+        df = channel_counts.merge(total_counts, on='user_id')
+        df['ratio_following'] = df['count_following'] / df['total']
+
+        return df
+
 
     def execute_wilcoxon_test(self, per_user):
         """Wilcoxon signed-rank test comparing is_following_ratio vs not_following_ratio."""
@@ -435,9 +442,10 @@ if __name__ == '__main__':
     # df = cor.get_data()
     # cor.specific_cor(df)
 
-    # fol = Cross_Ref_Followers()
-    # user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
-    # user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    fol = Cross_Ref_Followers()
+    user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
+    user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    fol.compute_ratios_channel_types(user_engagements)
     # per_user = fol.compute_ratios(user_engagements)
     # fol.execute_wilcoxon_test(per_user)
 

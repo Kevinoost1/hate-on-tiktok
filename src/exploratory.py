@@ -149,6 +149,20 @@ class Hate_Speech_Target:
 
         user_avg = ratios.groupby(['user_id', 'channel_type'])[subtopic_cols + ['channel_ratio']].mean()
         channel_df = user_avg.groupby('channel_type').mean().reset_index()
+        # Compute SEMs for error bars
+        channel_sems = user_avg['channel_ratio'].groupby(
+            user_avg.index.get_level_values('channel_type')).sem()
+
+        # Compute SEMs for subtopic bars
+        # user_avg has normalized subtopic ratios per user-channel;
+        # multiply by channel ratio to get user-level contribution
+        subtopic_contributions = user_avg[subtopic_cols].copy()
+        for col in subtopic_cols:
+            subtopic_contributions[col] = subtopic_contributions[col] * user_avg['channel_ratio']
+
+        subtopic_sems = subtopic_contributions.groupby(
+            subtopic_contributions.index.get_level_values('channel_type')).sem()
+
 
         subtopic_df = (user_avg[subtopic_cols].groupby(user_avg.index.get_level_values('channel_type')).mean().reset_index().melt(id_vars='channel_type', var_name='label', value_name='ratio'))
 
@@ -185,10 +199,15 @@ class Hate_Speech_Target:
             ch_ratio = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
             channel_bar_values[channel] = ch_ratio
             ax.barh(midpoint, ch_ratio, height=(end - start) + 1.15, color=channel_colors[channel], alpha=0.14, zorder=0)
+            ax.errorbar(ch_ratio, midpoint, xerr=channel_sems[channel], fmt='none',
+                        ecolor=channel_colors[channel], capsize=4, zorder=1)
 
         for y, (_, row) in zip(y_positions, df.iterrows()):
 
             ax.barh(y, row["ratio"], color=channel_colors[row["channel_type"]], height=0.60, zorder=2)
+            sem_val = subtopic_sems.loc[row["channel_type"], row["label"]]
+            ax.errorbar(row["ratio"], y, xerr=sem_val, fmt='none',
+                        ecolor=channel_colors[row["channel_type"]], capsize=4, zorder=3)
 
         max_bar = max(channel_bar_values.values())
         ax.set_xlim(0, max_bar)
@@ -198,11 +217,11 @@ class Hate_Speech_Target:
         for channel, (start, end) in channel_positions.items():
             midpoint = (start + end) / 2
             ch_ratio = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
-            label = ax.text(ch_ratio + 0.01, midpoint, channel_labels[channel], transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="bold")
+            label = ax.text(ch_ratio + 0.01, midpoint - 1, channel_labels[channel], transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="bold")
 
             ext = label.get_window_extent(renderer=renderer)
             pt_to_data_x = 1.0 / (ax.transData.transform([[1, 0]])[0][0] - ax.transData.transform([[0, 0]])[0][0])
-            ax.text(ch_ratio + 0.01 + ext.width * pt_to_data_x + 0.025, midpoint, f"{ch_ratio*100:.1f}%", transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="normal")
+            ax.text(ch_ratio + 0.01 + ext.width * pt_to_data_x + 0.025, midpoint - 1, f"{ch_ratio*100:.1f}%", transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="normal")
 
         ax.set_xticks(MaxNLocator(nbins=10).tick_values(0, max_bar))
         ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda val, _: f"{val*100:.0f}%"))
@@ -385,29 +404,29 @@ class Cross_Ref_Followers():
 
 
 if __name__ == '__main__':
-    # target = Hate_Speech_Target()
-    # target.get_hate_speech()
-    # target.add_keyword_columns()
+    target = Hate_Speech_Target()
+    target.get_hate_speech()
+    target.add_keyword_columns()
 
-    # ratios = target.compute_user_channel_ratios()
-    # results = target.run_anovas(ratios)
+    ratios = target.compute_user_channel_ratios()
+    results = target.run_anovas(ratios)
 
-    # target.plot_channel_ratios(ratios)
+    target.plot_channel_ratios(ratios)
 
     # cor = Correlation_Matrix()
     # df = cor.get_data()
     # cor.specific_cor(df)
 
-    fol = Cross_Ref_Followers()
-    user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
-    user_engagements = fol.merge_following_vs_non_following(user_engagements)
-    per_user = fol.compute_ratios(user_engagements)
-    fol.execute_wilcoxon_test(per_user)
+    # fol = Cross_Ref_Followers()
+    # user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
+    # user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    # per_user = fol.compute_ratios(user_engagements)
+    # fol.execute_wilcoxon_test(per_user)
 
-    user_engagements = fol.get_engagements(analysis='tc.impoliteness >= 5 OR tc.intolerance >= 5')
-    user_engagements = fol.merge_following_vs_non_following(user_engagements)
-    per_user = fol.compute_ratios(user_engagements)
-    fol.execute_wilcoxon_test(per_user)
+    # user_engagements = fol.get_engagements(analysis='tc.impoliteness >= 5 OR tc.intolerance >= 5')
+    # user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    # per_user = fol.compute_ratios(user_engagements)
+# fol.execute_wilcoxon_test(per_user)
 
 
 

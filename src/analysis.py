@@ -470,7 +470,7 @@ class DataExtract:
         feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
                                                               colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
-                                                              restrictions='.user_id NOT IN (119, 132)') # participant 119 was excluded due to being to old (age 30), 132 was excluded due to having donated only one video from 2020
+                                                              restrictions='e.user_id NOT IN (119, 132)') # participant 119 was excluded due to being to old (age 30), 132 was excluded due to having donated only one video from 2020
 
         feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]

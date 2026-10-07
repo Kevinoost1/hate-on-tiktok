@@ -408,8 +408,6 @@ class Graphs:
         plt.xticks(rotation=45)
         fig.subplots_adjust(bottom=0.25)
 
-        div_by_channel_type()
-
         """
         Data availability for supplement
         """

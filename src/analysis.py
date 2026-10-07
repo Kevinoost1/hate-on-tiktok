@@ -30,7 +30,7 @@ def main():
     robust = Robustness(db)
 
     dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
-    # hate_diff_threshold = graphs.create_hate_hist(dfs[0])
+    hate_diff_threshold = graphs.create_hate_hist(dfs[0])
 
     politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
     politics_t_event_dfs = [df[0] for df in politics_t_dfs]

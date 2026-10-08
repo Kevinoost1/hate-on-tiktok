@@ -47,8 +47,6 @@ def main():
     stats.get_watchtime(dfs)
     stats.dump_to_json()
 
-    robust.robustness_hate_source(dfs)
-
 
 class Preprocess:
     def __init__(self, topicColumnName='topic', intoleranceColumnName='intolerance', impolitenessColumnName='impoliteness'):
@@ -324,8 +322,6 @@ class Graphs:
 
             preprocessed_dfs.append(plot_results)
 
-
-
         results: list[pd.DataFrame] = preprocessed_dfs 
         fig, axes = plt.subplots(1, 1, figsize=(20,20), sharex=True)
 
@@ -531,149 +527,6 @@ class DataExtract:
             channels = json.load(f)
         
         return channels['official'], channels['unofficial'], channels['ordering']
-
-class Robustness:
-    def __init__(self, database: Database, topicColumnName='topic', intoleranceColumnName='topic', impolitenessColumnName='impoliteness'):
-        self.topicColumnName: str = topicColumnName
-        self.intoleranceColumnName: str = intoleranceColumnName
-        self.impolitenessColumnName: str = impolitenessColumnName
-
-        self.database: Database = database
-
-    def robustness_hate_source(self, dfs):
-        definitions = ['user_exposures']# , 'reach', 'avg_users']
-
-        for label in definitions:
-            self.get_top500(dfs, label)
- 
-    def get_top500(self, dfs, label):
-        stats = Statistics()
-        graphs = Graphs()
-
-        dfs = [self.switch_alternative_label(df, label) for df in dfs]
-
-        robust_hate_source = graphs.create_hate_source_graph(dfs)
-        # follower_graph = self.get_followers(dfs[0])
-        graphs.export_png(robust_hate_source, custom_label=f'robust_{label}')
-
-        stats.get_hate_source(dfs)
-        stats.dump_to_json(label=f'robustness/{label}')
-
-    def switch_alternative_label(self, df, label):
-        official = df.loc[df['official'] == 1, 'unique_id'].to_list()
-        official_sql = "(" + ",".join(f"'{x}'" for x in set(official)) + ")"
-
-        unofficial = df.loc[df['official'] == 2, 'unique_id'].to_list()
-        unofficial_sql = "(" + ",".join(f"'{x}'" for x in set(unofficial)) + ")"
-        print(unofficial_sql)
-
-        if label == 'user_exposures':
-            definition = self.define_exposure(official_sql)
-            print(official_sql)
-        elif label == 'reach':
-            definition = self.define_reach(official_sql)
-        elif label == 'followers':
-            definition = self.define_followers(official_sql)
-        else:
-            definition = self.define_avg_audience(official_sql)
-
-        with sqlite3.connect(BASE_DIR/'database/150_db.sqlite3') as db:
-            top_channels = pd.read_sql(definition, db)
-
-        top_channel_ids = set(top_channels['unique_id'])
-
-        local_df = df.copy()
-        local_df.loc[local_df['unique_id'].isin(top_channel_ids), 'official'] = 2
-        local_df.loc[(~local_df['unique_id'].isin(top_channel_ids)) & (local_df['official'] == 2), 'official'] = 3
-
-        get_followers = self.database.retrieve_data(tableName='authors', colNames=['id AS author_id', 'follower_count'])
-        local_df = local_df.merge(get_followers, on='author_id', how='left')
-        local_df.loc[(local_df['official'] == 3) & (local_df['follower_count'] > local_df.loc[local_df['official'] == 2, 'follower_count'].quantile(0.90)), 'official'] = 2
-
-        # local_df.loc[(local_df['official'] == 3) & (local_df['follower_count'] > 338000), 'official'] = 2 # Move all channels with > 338000 followers to alternative
-        return local_df
-
-    # Popularity is defined as user exposures: each unique combination of a user and watched news vid from a channel is 1 exposure
-    @staticmethod
-    def define_exposure(official_sql):
-        return f"""
-            SELECT unique_id, follower_count, COUNT(*) AS user_video_exposures FROM (
-                SELECT DISTINCT e.user_id, e.video_id, a.unique_id, a.follower_count
-                FROM engagements e JOIN videos v ON e.video_id = v.id
-                JOIN transcript_classification tc ON e.video_id = tc.video_id
-                JOIN authors a ON v.author_id = a.id WHERE tc.topic = 'News, Politics & Societal Issues')
-            WHERE unique_id NOT IN {official_sql}
-            GROUP BY unique_id
-            ORDER BY user_video_exposures DESC
-            LIMIT 500;
-        """
-
-    # popularity is defined as reach -> how many unique users did this channels reach with their news videos
-    @staticmethod
-    def define_reach(official_sql):
-        return f"""
-            SELECT unique_id, follower_count, COUNT(DISTINCT user_id) AS unique_users FROM (
-                SELECT DISTINCT e.user_id, e.video_id, a.unique_id, a.follower_count
-                FROM engagements e 
-                JOIN videos v ON e.video_id = v.id
-                JOIN transcript_classification tc ON e.video_id = tc.video_id
-                JOIN authors a ON v.author_id = a.id WHERE tc.topic = 'News, Politics & Societal Issues')
-            WHERE unique_id NOT IN {official_sql}
-            GROUP BY unique_id
-            ORDER BY unique_users DESC
-            LIMIT 500;
-            """
-
-    # popularity as defined by average users that watched each news video from the channel
-    @staticmethod
-    def define_avg_audience(official_sql):
-       return f"""
-            SELECT unique_id, follower_count, CAST(COUNT(*) AS FLOAT) / COUNT(DISTINCT video_id) AS avg_users_per_video
-            FROM (SELECT DISTINCT e.user_id, e.video_id, a.unique_id, a.follower_count
-                FROM engagements e 
-                JOIN videos v ON e.video_id = v.id
-                JOIN transcript_classification tc ON e.video_id = tc.video_id
-                JOIN authors a ON v.author_id = a.id WHERE tc.topic = 'News, Politics & Societal Issues')
-            WHERE unique_id NOT IN {official_sql}
-            GROUP BY unique_id
-            ORDER BY avg_users_per_video DESC
-            LIMIT 500;
-        """         
-
-    def get_followers(self, df):
-        high_hate: pd.DataFrame = df[df['high_hate'] == 1]
-
-        alternative_sources = high_hate[high_hate['official'] == 2]
-        niche_sources = high_hate[high_hate['official'] == 3]
-
-        get_followers = self.database.retrieve_data(tableName='authors', colNames=['id AS author_id', 'follower_count'])
-        alternative_sources = alternative_sources.merge(get_followers, on='author_id', how='left').sort_values(by=['follower_count'], ascending=False)
-        niche_sources = niche_sources.merge(get_followers, on='author_id', how='left').sort_values(by=['follower_count'], ascending=False)
-
-        fig, ax = plt.subplots(1, 1, figsize=(40, 20))
-        
-        x_alt = np.arange(len(alternative_sources))
-        x_niche = np.arange(len(niche_sources)) + len(alternative_sources) + 5
-                
-        ax.bar(x_alt, alternative_sources['follower_count'], label='alternative')
-        ax.bar(x_niche, niche_sources['follower_count'], label='niche')
-
-        ax.set_ylim(min(alternative_sources['follower_count'].min(), niche_sources['follower_count'].min()), 
-                    max(alternative_sources['follower_count'].max(), niche_sources['follower_count'].max()) * 1.1)
-
-        ax.text(x_alt.mean(), 
-                max(alternative_sources['follower_count'].max(), niche_sources['follower_count'].max()) * 1.1, 
-                f"Median: {alternative_sources['follower_count'].median():,.0f}",ha="center", fontsize=14, fontweight="bold")
-
-        ax.text(x_niche.mean(), 
-                max(alternative_sources['follower_count'].max(), niche_sources['follower_count'].max()) * 1.1, 
-                f"Median: {niche_sources['follower_count'].median():,.0f}",ha="center", fontsize=14, fontweight="bold")
-
-        ax.set_xticks([])
-
-        return fig
-
-        
      
 if __name__=='__main__':
     main()

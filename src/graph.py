@@ -232,12 +232,12 @@ class Exposure_Graph:
         # Separate titles for left and right panels
         fig.text(
             (left_left_x + left_right_x) / 2, 0.96,
-            "Hateful News Exposure",
+            "Youths' Exposure to Hateful News",
             fontsize=self.fontsize_titles, ha='center', va='top',
         )
         fig.text(
             (right_left_x + right_right_x) / 2 + 0.05, 0.96,
-            "Engagement with Hateful News",
+            "Youths' Engagement with Hateful News",
             fontsize=self.fontsize_titles, ha='center', va='top',
         )
 
@@ -378,12 +378,12 @@ class Exposure_Graph:
             body.set_edgecolor(self.colors["red"])
             body.set_linewidth(2)
 
-        mean_val = hate_diff.mean()
+        mean_val = hate_diff.median()
 
         ax_right.axhline(
             mean_val,
             color=self.colors["red"], linestyle=":", linewidth=2.5,
-            label=f"Mean = {mean_val:.2f}s",
+            label=f"Median = {mean_val:.2f}s",
         )
         # Center y-axis on 0 with symmetric limits
         ax_right.set_ylim(-50, 150)

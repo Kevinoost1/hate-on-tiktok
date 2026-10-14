@@ -250,7 +250,7 @@ class Exposure_Graph:
             ),
             (
                 axes_left[1], hate_monthly_5, "monthly_avg_hate",
-                self.colors["orange"], "Average Hate Videos per Month", False, 80, False,
+                self.colors["orange"], "Average Number of Hate Videos per Month", False, 80, False,
             ),
             (
                 axes_left[2], following_5, "is_following_ratio",

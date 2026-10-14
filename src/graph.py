@@ -5,7 +5,9 @@ from pathlib import Path
 import seaborn as sns
 import matplotlib; matplotlib.use('TkAgg'); import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import FuncFormatter
 from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 from scipy.stats import f_oneway, pearsonr, shapiro, wilcoxon
 from statsmodels.stats.multicomp import MultiComparison
 from itertools import combinations
@@ -27,7 +29,9 @@ class Exposure_Graph:
         self.axesticks = 14
         self.fontsize_labels = 34
         self.fontsize_titles = 40
-        self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
+        self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d', 
+                       'light_blue': '#3a68b0', 'red': '#c43a3a', 'light_green': '#7ab878', 'teal': '#2a8b7a', 'cream': '#f5f0e8',
+                       'light_purple': '#d070c8', 'magenta': '#d040b0', 'violet': '#8a2080',}
 
     def get_exposure_ratio(self, threshold=5) -> pd.DataFrame:
         query = f"""
@@ -189,41 +193,68 @@ class Exposure_Graph:
 
     def create_exposure(self) -> plt.Figure:
         """
-        Three-panel figure with percentage histograms and KDE curves.
-
-        Histogram: percentage of user_ids in each bin.
-        KDE: estimated percentage of user_ids per equivalent bin width.
-        Both use the same y-axis interpretation.
+        Four-panel figure with three percentage histograms/KDE panels and
+        a narrow right panel showing the per-user median watching-time
+        difference (hate − non-hate) as a violin plot.
         """
 
         hate_exposure_5 = self.get_exposure_ratio()["hate_ratio"].dropna()
         hate_monthly_5 = self.get_exposure_monthly()["monthly_avg_hate"].dropna()
-        following_5 = self.get_ratio_following()["not_following_ratio"].dropna()
+        following_5 = self.get_ratio_following()["is_following_ratio"].dropna()
 
-        fig, axes = plt.subplots(
-            3, 1,
-            figsize=(40, 24),
-            gridspec_kw={"hspace": 0.7},
+        # Per-user median difference in watching time (hate − non-hate)
+        viewing = self.get_viewing_durations()
+        hate_diff = viewing["hate_wt_med_diff"].dropna()
+
+        # 3×3 grid — left: 3 panels, middle: violin plot, right: white space
+        fig = plt.figure(figsize=(38, 18))
+        gs = fig.add_gridspec(
+            3, 3,
+            width_ratios=[3.25, 1, 0.3],
+            hspace=0.5,
+            wspace=0.4,
         )
 
-        fig.suptitle(
-            "Exposure Distribution",
-            fontsize=self.fontsize_titles,
-            y=0.98,
+        axes_left = [fig.add_subplot(gs[i, 0]) for i in range(3)]
+        ax_right = fig.add_subplot(gs[:, 1])
+
+
+
+        # Draw figure first so get_position() returns accurate coordinates
+        fig.canvas.draw()
+
+        # Panel center positions for titles and divider
+        left_left_x = axes_left[0].get_position().x0
+        left_right_x = axes_left[0].get_position().x1
+        right_left_x = ax_right.get_position().x0
+        right_right_x = ax_right.get_position().x1
+        
+        # Separate titles for left and right panels
+        fig.text(
+            (left_left_x + left_right_x) / 2, 0.96,
+            "Hateful News Exposure",
+            fontsize=self.fontsize_titles, ha='center', va='top',
         )
+        fig.text(
+            (right_left_x + right_right_x) / 2 + 0.05, 0.96,
+            "Engagement with Hateful News",
+            fontsize=self.fontsize_titles, ha='center', va='top',
+        )
+
+
 
         panels = [
             (
-                axes[0], hate_exposure_5, "hate_ratio",
-                self.colors["purple"], "Ratio Hateful News (%)", True, 30, False,
+                axes_left[0], hate_exposure_5, "hate_ratio",
+                self.colors["purple"], "Ratio of News Feed Containing Hate (%)", True, 30, False,
             ),
             (
-                axes[1], hate_monthly_5, "monthly_avg_hate",
+                axes_left[1], hate_monthly_5, "monthly_avg_hate",
                 self.colors["orange"], "Average Hate Videos per Month", False, 80, False,
             ),
             (
-                axes[2], following_5, "not_following_ratio",
-                self.colors["green"], "Hate from Not-Followed Accounts (%)", True, 30, True,
+                axes_left[2], following_5, "is_following_ratio",
+                self.colors["green"], "Share of Hate from Followed Accounts (%)", True, 30, True,
             ),
         ]
 
@@ -243,7 +274,6 @@ class Exposure_Graph:
 
             # Use fixed, common-width bins for the histogram and KDE scaling.
             if np.min(x) == np.max(x):
-                # A constant distribution cannot be estimated by a KDE.
                 ax.hist(
                     x,
                     bins=[x[0] - 0.5, x[0] + 0.5],
@@ -260,7 +290,6 @@ class Exposure_Graph:
                 edges = np.histogram_bin_edges(x, bins=bins)
                 bin_width = edges[1] - edges[0]
 
-                # Percentage of users per bin.
                 sns.histplot(
                     x=x,
                     bins=edges,
@@ -272,8 +301,6 @@ class Exposure_Graph:
                     zorder=1,
                 )
 
-                # KDE density -> percentage per histogram-bin width.
-                # This gives the curve and bars comparable y-axis units.
                 if len(x) >= 2 and np.std(x) > 0:
                     sns.kdeplot(
                         x=x,
@@ -286,13 +313,13 @@ class Exposure_Graph:
                         zorder=2,
                     )
 
-                    # Rescale the density currently drawn by seaborn.
                     line = ax.lines[-1]
                     line.set_ydata(line.get_ydata() * bin_width * 100)
-                    ax.fill_between(line.get_xdata(), line.get_ydata(),
-                                    color=color, alpha=0.1, zorder=2)
+                    ax.fill_between(
+                        line.get_xdata(), line.get_ydata(),
+                        color=color, alpha=0.1, zorder=2,
+                    )
 
-                # Include a marker for the mean/median.
                 stat_x = np.median(x) if use_median else np.mean(x)
                 ax.axvline(
                     stat_x,
@@ -306,9 +333,16 @@ class Exposure_Graph:
             ax.set_xlabel(xlabel, fontsize=self.fontsize_labels)
             ax.set_ylabel("Share of\nParticipants (%)", fontsize=self.fontsize_labels)
             ax.tick_params(axis="both", labelsize=self.fontsize_labels)
-            ax.xaxis.set_major_locator(MaxNLocator(self.axesticks))
+            ax.xaxis.set_major_locator(MaxNLocator(5))
+            # Hide the 0 tick label on the x-axis
+            ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: '' if x == 0 else f'{x:.0f}'))
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
+            # Set y-ticks including 0 and the max y-value explicitly
+            y_ticks = ax.get_yticks()
+            y_max = max(y_ticks) if len(y_ticks) > 0 else 0
+            ax.set_yticks([0, y_max])
+
             ax.legend(
                 fontsize=self.fontsize_labels * 0.7,
                 loc="upper right",
@@ -320,19 +354,73 @@ class Exposure_Graph:
                 use_median=use_median
             )
 
-        # Ratios displayed as percentages occupy 0–100 on the x-axis.
+        axes_left[0].set_xlim(0, 9)
+        axes_left[0].set_ylim(0)
 
-        axes[0].set_xlim(0, 9)
-        axes[0].set_ylim(0)
+        axes_left[1].set_xlim(0, 25)
+        axes_left[2].set_xlim(0, 13)
 
-        axes[1].set_xlim(0, 25)
+        # ---- 4th panel: violin plot of per-user median diff ----
+        ax_right.set_title(
+            "",
+            fontsize=self.fontsize_titles,
+        )
 
-        axes[2].set_xlim(100, 85)
+        parts = ax_right.violinplot(
+            hate_diff.values,
+            showmedians=False,
+            showmeans=False,
+            showextrema=False,
+        )
+        for body in parts["bodies"]:
+            body.set_facecolor(self.colors["red"])
+            body.set_alpha(0.4)
+            body.set_edgecolor(self.colors["red"])
+            body.set_linewidth(2)
+
+        mean_val = hate_diff.mean()
+
+        ax_right.axhline(
+            mean_val,
+            color=self.colors["red"], linestyle=":", linewidth=2.5,
+            label=f"Mean = {mean_val:.2f}s",
+        )
+        # Center y-axis on 0 with symmetric limits
+        ax_right.set_ylim(-50, 150)
+
+        ax_right.set_ylabel(
+            "Difference in Median Viewing Times (sec)", fontsize=self.fontsize_labels
+        )
+        ax_right.tick_params(axis="both", labelsize=self.fontsize_labels)
+        ax_right.spines["top"].set_visible(False)
+        ax_right.spines["right"].set_visible(False)
+        ax_right.legend(
+            fontsize=self.fontsize_labels * 0.7,
+            loc="upper left",
+        )
+
+        ax_right.set_xticks([])
+
+        # Side labels on the right of the violin plot
+        ax_right.text(
+            x=1.02, y=100, rotation=0, rotation_mode="anchor",
+            s="(+)Hateful News\nWatched for Longer",
+            va="center", ha="left",
+            fontsize=self.fontsize_labels * 0.70,
+            transform=ax_right.get_yaxis_transform(),
+            clip_on=False,
+        )
+        ax_right.text(
+            x=1.02, y=-25, rotation=0, rotation_mode="anchor",
+            s="(-)Non-Hateful News\nWatched for Longer",
+            va="center", ha="left",
+            fontsize=self.fontsize_labels * 0.70,
+            transform=ax_right.get_yaxis_transform(),
+            clip_on=False,
+        )
 
         plt.show()
         return fig
-
-
     def notes(self):
         thresholds = [3, 4, 5, 6]
         ratio_proportions = []
@@ -346,6 +434,10 @@ class Exposure_Graph:
             monthly_proportions.append(hate_monthly)
 
 
+    def export_png(self,  *figs: tuple[plt.Figure], custom_label='') -> None:
+        for i, fig in enumerate(figs):
+            fig.savefig(f'plots/{custom_label}_{i}.png', dpi=300)
+
 
     def export_tiff(self, *figs: tuple[plt.Figure], custom_label='exposure') -> None:
         for i, fig in enumerate(figs):
@@ -356,6 +448,5 @@ if __name__=='__main__':
     graph = Exposure_Graph()
     exposure_plot = graph.create_exposure()
 
-    graph.export_tiff(exposure_plot)
-
-    # graph.get_viewing_durations()
+    graph.export_png(exposure_plot)
+    # graph.export_tiff(exposure_plot)

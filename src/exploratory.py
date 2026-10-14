@@ -172,7 +172,7 @@ class Hate_Speech_Target:
 
             for cat in categories:
                 original = ch_df[cat].values[0]
-                ratio = (original / total_subtopics) * channel_ratio if total_subtopics > 0 and channel_ratio > 0 else 0
+                ratio = (original / total_subtopics) if total_subtopics > 0 and channel_ratio > 0 else 0
                 rows.append({"label": cat, "channel_type": channel, "ratio": ratio, "original_ratio": original})
 
         df = pd.DataFrame(rows)
@@ -185,7 +185,7 @@ class Hate_Speech_Target:
 
                 current_y += 1
             channel_positions[channel] = (start, current_y - 1)
-            current_y += 1
+            current_y += 1.8
 
         fig, ax = plt.subplots(figsize=(40, 26))
 
@@ -195,32 +195,32 @@ class Hate_Speech_Target:
             midpoint = (start + end) / 2
             ch_ratio = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
             channel_bar_values[channel] = ch_ratio
-            ax.barh(midpoint, ch_ratio, height=(end - start) + 1.15, color=channel_colors[channel], alpha=0.14, zorder=0)
+            ax.barh(midpoint, ch_ratio, height=(end - start) + 1.50, facecolor=(*plt.matplotlib.colors.to_rgb(channel_colors[channel]), 0.14), zorder=0, 
+                        edgecolor=(*plt.matplotlib.colors.to_rgb(channel_colors[channel]), 0.45), linewidth=2)
             ax.errorbar(ch_ratio, midpoint, xerr=channel_sems[channel], fmt='none',
                         ecolor=channel_colors[channel], capsize=8, capthick=2, zorder=1)
 
         for y, (_, row) in zip(y_positions, df.iterrows()):
 
-            ax.barh(y, row["ratio"], color=channel_colors[row["channel_type"]], height=0.60, zorder=2)
+            ax.barh(y, row["ratio"], color=channel_colors[row["channel_type"]], height=0.60, zorder=2, alpha=0.9)
             sem_val = subtopic_sems.loc[row["channel_type"], row["label"]]
             ax.errorbar(row["ratio"], y, xerr=sem_val, fmt='none',
-                        ecolor=channel_colors[row["channel_type"]], capsize=8, capthick=2, zorder=3)
+                        ecolor=channel_colors[row["channel_type"]], capsize=8, capthick=2, zorder=3, alpha=0.9)
 
-        max_bar = max(channel_bar_values.values())
-        ax.set_xlim(0, max_bar)
+
         ax.figure.canvas.draw()
         renderer = ax.figure.canvas.get_renderer()
 
         for channel, (start, end) in channel_positions.items():
             midpoint = (start + end) / 2
             ch_ratio = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
-            label = ax.text(ch_ratio + 0.01, midpoint - 1, channel_labels[channel], transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="bold")
+            label = ax.text(0.75, midpoint - 1, channel_labels[channel], transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="bold")
 
             ext = label.get_window_extent(renderer=renderer)
             pt_to_data_x = 1.0 / (ax.transData.transform([[1, 0]])[0][0] - ax.transData.transform([[0, 0]])[0][0])
-            ax.text(ch_ratio + 0.01 + ext.width * pt_to_data_x + 0.025, midpoint - 1, f"{ch_ratio*100:.1f}%", transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="normal")
+            ax.text(0.80 + ext.width * pt_to_data_x + 0.025, midpoint - 1, f"{ch_ratio*100:.1f}%", transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="normal")
 
-        ax.set_xticks(MaxNLocator(nbins=10).tick_values(0, max_bar))
+        ax.set_xticks(MaxNLocator(nbins=10).tick_values(0, 1))
         ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda val, _: f"{val*100:.0f}%"))
         ax.set_yticks(y_positions)
         ax.set_yticklabels(df["label"], fontsize=self.axesticks)
@@ -231,6 +231,7 @@ class Hate_Speech_Target:
         ax.tick_params(axis="x", labelsize=self.axesticks)
 
         sns.despine(left=True)
+        ax.set_xlim(0, 1)
 
         ax.legend(handles=[Patch(color=channel_colors[ch], label=channel_labels[ch]) for ch in channel_order], loc='lower right', fontsize=self.axesticks, frameon=False)
         plt.subplots_adjust(left=0.28, right=0.95, top=0.88, bottom=0.15)
@@ -437,16 +438,16 @@ if __name__ == '__main__':
     results = target.run_anovas(ratios)
 
     hate_source_graph = target.plot_channel_ratios(ratios)
-    export_tiff(hate_source_graph)
+    # export_tiff(hate_source_graph)
 
     # cor = Correlation_Matrix()
     # df = cor.get_data()
     # cor.specific_cor(df)
 
-    fol = Cross_Ref_Followers()
-    user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
-    user_engagements = fol.merge_following_vs_non_following(user_engagements)
-    fol.compute_ratios_channel_types(user_engagements)
+    # fol = Cross_Ref_Followers()
+    # user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
+    # user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    # fol.compute_ratios_channel_types(user_engagements)
     # per_user = fol.compute_ratios(user_engagements)
     # fol.execute_wilcoxon_test(per_user)
 

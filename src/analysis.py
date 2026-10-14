@@ -27,7 +27,6 @@ def main():
     data = DataExtract(db)
     graphs = Graphs()
     stats = Statistics()
-    robust = Robustness(db)
 
     dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
     hate_diff_threshold = graphs.create_hate_hist(dfs[0])
@@ -41,6 +40,7 @@ def main():
 
     graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
     graphs.export_png(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
+    graphs.export_tiff(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
 
     stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
     stats.get_hate_source(dfs)
@@ -128,7 +128,7 @@ class Statistics:
         df = dfs[0]
 
         # We can only keep the videos where we can cleanly measure watch time
-        df[df['new_session'] == 0]
+        df = df[df['new_session'] == 0]
 
         df.to_csv(BASE_DIR/'survival.csv')
 
@@ -446,6 +446,15 @@ class Graphs:
         for i, fig in enumerate(figs):
             fig.savefig(f'plots/{custom_label}_{i}.png', dpi=300)
 
+    def export_eps(self, *figs: tuple[plt.Figure], custom_label='') -> None:
+        for i, fig in enumerate(figs):
+            fig.savefig(f'plots/{custom_label}_{i}.eps', format='eps')
+
+    def export_tiff(self, *figs: tuple[plt.Figure], custom_label='') -> None:
+        for i, fig in enumerate(figs):
+            fig.savefig(f'plots/{custom_label}_{i}.tiff', format='tiff', dpi=600)
+
+            
  
 class DataExtract:
     def __init__(self, database: Database, base_dir=BASE_DIR, topicColumnName='topic', 

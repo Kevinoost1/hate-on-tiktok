@@ -346,8 +346,16 @@ class Exposure_Graph:
             monthly_proportions.append(hate_monthly)
 
 
+
+    def export_tiff(self, *figs: tuple[plt.Figure], custom_label='exposure') -> None:
+        for i, fig in enumerate(figs):
+            fig.savefig(f'plots/{custom_label}_{i}.tiff', format='tiff', dpi=600)
+
+
 if __name__=='__main__':
     graph = Exposure_Graph()
-    graph.create_exposure()
+    exposure_plot = graph.create_exposure()
 
-    graph.get_viewing_durations()
+    graph.export_tiff(exposure_plot)
+
+    # graph.get_viewing_durations()

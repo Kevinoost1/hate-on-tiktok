@@ -341,8 +341,6 @@ class Cross_Ref_Followers():
 
         df['is_following_ratio'] = df['video_count_is_following'] / df['total_video_count']
         df['not_following_ratio'] = df['video_count_not_following'] / df['total_video_count']
-
-        channel_types_following
  
         return df
 
@@ -424,6 +422,9 @@ class Cross_Ref_Followers():
         return channels['official'], channels['unofficial'], channels['ordering']
 
 
+def export_tiff(self, *figs: tuple[plt.Figure], custom_label='') -> None:
+    for i, fig in enumerate(figs):
+        fig.savefig(f'plots/{custom_label}_{i}.tiff', format='tiff', dpi=600)
 
 
 
@@ -435,7 +436,8 @@ if __name__ == '__main__':
     ratios = target.compute_user_channel_ratios()
     results = target.run_anovas(ratios)
 
-    target.plot_channel_ratios(ratios)
+    hate_source_graph = target.plot_channel_ratios(ratios)
+    export_tiff(hate_source_graph)
 
     # cor = Correlation_Matrix()
     # df = cor.get_data()

@@ -13,6 +13,7 @@ import zstandard as zstd
 from exploratory import *
 import numpy as np
 from scipy.stats import gaussian_kde
+from analysis import *
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -134,6 +135,22 @@ class Exposure_Graph:
 
         return df
 
+    def get_viewing_durations(self):
+        data = DataExtract(self.db)
+        feed_data = data.request_time_series()
+        df = feed_data[0]
+
+        df = df[df['topic'] == 'News, Politics & Societal Issues']
+        df = df[df['new_session'] == 0]
+
+        per_user = df.groupby('user_id').apply(lambda x: pd.Series({'hate_med_wt': x.loc[x['high_hate'] == 1, 'watch_time_s'].median(), 
+                                                                   'no_hate_med_wt': x.loc[x['high_hate'] == 0, 'watch_time_s'].median()}))
+
+        per_user['hate_wt_med_diff'] = per_user['hate_med_wt'] - per_user['no_hate_med_wt']
+
+        return per_user
+
+
     def _manual_kde_percentage(self, data, bins=30, color=None, ax=None, alpha_fill=0.2, linewidth=2.5, zorder_curve=3, zorder_fill=2):
         """Compute KDE and draw it on the same percentage scale as histplot(stat='percent')."""
         if len(data) < 2 or data.nunique() <= 1:
@@ -198,15 +215,15 @@ class Exposure_Graph:
         panels = [
             (
                 axes[0], hate_exposure_5, "hate_ratio",
-                self.colors["dark_blue"], "Hate Ratio (%)", True, 10, False,
+                self.colors["purple"], "Ratio Hateful News (%)", True, 30, False,
             ),
             (
                 axes[1], hate_monthly_5, "monthly_avg_hate",
-                self.colors["orange"], "Monthly Average (videos/month)", False, 40, False,
+                self.colors["orange"], "Average Hate Videos per Month", False, 80, False,
             ),
             (
                 axes[2], following_5, "not_following_ratio",
-                self.colors["green"], "Not-Following Ratio (%)", True, 40, True,
+                self.colors["green"], "Hate from Not-Followed Accounts (%)", True, 30, True,
             ),
         ]
 
@@ -282,12 +299,12 @@ class Exposure_Graph:
                     linestyle="--",
                     color=color,
                     linewidth=1.5,
-                    alpha=0.7,
-                    label=f"Median = {stat_x:.1f}" if use_median else f"Mean = {stat_x:.1f}",
+                    alpha=0.8,
+                    label=f"Median = {stat_x:.2f}" if use_median else f"Mean = {stat_x:.2f}",
                 )
 
             ax.set_xlabel(xlabel, fontsize=self.fontsize_labels)
-            ax.set_ylabel("% of User IDs per bin", fontsize=self.fontsize_labels)
+            ax.set_ylabel("Share of\nParticipants (%)", fontsize=self.fontsize_labels)
             ax.tick_params(axis="both", labelsize=self.fontsize_labels)
             ax.xaxis.set_major_locator(MaxNLocator(self.axesticks))
             ax.spines["top"].set_visible(False)
@@ -305,12 +322,12 @@ class Exposure_Graph:
 
         # Ratios displayed as percentages occupy 0–100 on the x-axis.
 
-        axes[0].set_xlim(0, 10)
+        axes[0].set_xlim(0, 9)
         axes[0].set_ylim(0)
 
-        axes[1].set_xlim(0, 30)
+        axes[1].set_xlim(0, 25)
 
-        axes[2].set_xlim(100, 80)
+        axes[2].set_xlim(100, 85)
 
         plt.show()
         return fig
@@ -332,3 +349,5 @@ class Exposure_Graph:
 if __name__=='__main__':
     graph = Exposure_Graph()
     graph.create_exposure()
+
+    graph.get_viewing_durations()

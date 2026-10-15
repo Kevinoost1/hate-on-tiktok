@@ -333,12 +333,20 @@ class Hate_Speech_Target:
             sns.despine(ax=ax, left=True)
             ax.margins(x=0.03, y=0.12)
 
-        plt.subplots_adjust(left=0.22, right=0.90, top=0.94, bottom=0.09, wspace=0.42, hspace=0.42)
+        plt.subplots_adjust(left=0.18, right=0.96, top=0.94, bottom=0.09, wspace=0.80, hspace=0.65)
 
-        fig.savefig('plots/hate_channel_type_ratios_fourPanel.png', dpi=300, bbox_inches='tight', pad_inches=0.50)
+        fig.canvas.draw()
+        fig.savefig('plots/hate_channel_type_ratios_fourPanel.png', dpi=300)
         plt.show()
 
         return fig
+
+
+    def export_tiff(self, *figs: tuple[plt.Figure], custom_label='hateSource') -> None:
+        for i, fig in enumerate(figs):
+            fig.savefig(f'plots/{custom_label}_{i}.tiff', format='tiff', dpi=600)
+
+
 
 
 
@@ -524,11 +532,6 @@ class Cross_Ref_Followers():
         return channels['official'], channels['unofficial'], channels['ordering']
 
 
-def export_tiff(self, *figs: tuple[plt.Figure], custom_label='') -> None:
-    for i, fig in enumerate(figs):
-        fig.savefig(f'plots/{custom_label}_{i}.tiff', format='tiff', dpi=600)
-
-
 
 if __name__ == '__main__':
     target = Hate_Speech_Target()
@@ -539,7 +542,7 @@ if __name__ == '__main__':
     results = target.run_anovas(ratios)
 
     hate_source_graph = target.plot_channel_ratios_fourPanel(ratios)
-    # export_tiff(hate_source_graph)
+    target.export_tiff(hate_source_graph)
 
     # cor = Correlation_Matrix()
     # df = cor.get_data()

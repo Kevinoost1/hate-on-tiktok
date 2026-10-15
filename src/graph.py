@@ -421,6 +421,9 @@ class Exposure_Graph:
 
         plt.show()
         return fig
+
+
+
     def notes(self):
         thresholds = [3, 4, 5, 6]
         ratio_proportions = []
@@ -449,4 +452,4 @@ if __name__=='__main__':
     exposure_plot = graph.create_exposure()
 
     graph.export_png(exposure_plot)
-    # graph.export_tiff(exposure_plot)
+    graph.export_tiff(exposure_plot)

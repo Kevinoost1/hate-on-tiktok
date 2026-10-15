@@ -246,7 +246,7 @@ class Exposure_Graph:
         panels = [
             (
                 axes_left[0], hate_exposure_5, "hate_ratio",
-                self.colors["purple"], "Ratio of News Feed Containing Hate (%)", True, 30, False,
+                self.colors["purple"], "Percentage of News Feed Containing Hate (%)", True, 30, False,
             ),
             (
                 axes_left[1], hate_monthly_5, "monthly_avg_hate",
@@ -254,7 +254,7 @@ class Exposure_Graph:
             ),
             (
                 axes_left[2], following_5, "is_following_ratio",
-                self.colors["green"], "Share of Hate from Followed Accounts (%)", True, 30, True,
+                self.colors["green"], "Percentge of Hate from Followed Accounts (%)", True, 30, True,
             ),
         ]
 
@@ -331,7 +331,7 @@ class Exposure_Graph:
                 )
 
             ax.set_xlabel(xlabel, fontsize=self.fontsize_labels)
-            ax.set_ylabel("Share of\nParticipants (%)", fontsize=self.fontsize_labels)
+            ax.set_ylabel("PercPercentagee of\nParticipants (%)", fontsize=self.fontsize_labels)
             ax.tick_params(axis="both", labelsize=self.fontsize_labels)
             ax.xaxis.set_major_locator(MaxNLocator(5))
             # Hide the 0 tick label on the x-axis

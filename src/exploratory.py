@@ -241,6 +241,107 @@ class Hate_Speech_Target:
         return fig
 
 
+
+    def plot_channel_ratios_fourPanel(self, ratios):
+        channel_colors = {1: '#001157', 2: '#b03aa3', 3: '#ec8e3a'}
+        channel_labels = {1: 'Legacy', 2: 'Alternative', 3: 'Niche'}
+        channel_order = [1, 2, 3]
+
+        categories = list(self.keywords.keys())
+        subtopic_cols = list(self.keywords.keys())
+
+        user_avg = ratios.groupby(['user_id', 'channel_type'])[subtopic_cols + ['channel_ratio']].mean()
+
+        channel_df = (user_avg.groupby('channel_type').mean().reset_index())
+        channel_sems = user_avg['channel_ratio'].groupby(user_avg.index.get_level_values('channel_type')).sem()
+
+        subtopic_contributions = user_avg[subtopic_cols].copy()
+
+        for col in subtopic_cols:
+            subtopic_contributions[col] = (
+                subtopic_contributions[col] * user_avg['channel_ratio'])
+
+        subtopic_sems = subtopic_contributions.groupby(subtopic_contributions.index.get_level_values('channel_type')).sem()
+
+        rows = []
+        for channel in channel_order:
+            ch_df = channel_df[
+                channel_df['channel_type'] == channel]
+
+            for cat in categories:
+                original = ch_df[cat].values[0]
+
+                rows.append({'label': cat, 'channel_type': channel, 'ratio': original, 'original_ratio': original})
+
+        df = pd.DataFrame(rows)
+        fig, axes = plt.subplots(2, 2, figsize=(40, 28), sharex=True)
+
+        ax_channel = axes[0, 0]
+        subtopic_axes = [
+            axes[0, 1],  # Legacy
+            axes[1, 0],  # Alternative
+            axes[1, 1]   # Niche
+        ]
+
+        ax = ax_channel
+        for y, channel in enumerate(channel_order):
+            value = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
+
+            color_rgb = plt.matplotlib.colors.to_rgb(channel_colors[channel])
+
+            ax.barh(y, value, height=0.60, facecolor=(*color_rgb, 1.0), edgecolor=(*color_rgb, 1.0), linewidth=1.5, zorder=2)
+            ax.errorbar(value, y, xerr=channel_sems[channel], fmt='none', ecolor=channel_colors[channel], capsize=8, capthick=2, zorder=3)
+
+            ax.annotate(f'{value * 100:.2f}%', xy=(value + 0.05, y), xytext=(8, 0), textcoords='offset points', ha='left', va='center', 
+                        fontsize=self.axesticks, clip_on=False)
+
+        ax.set_yticks(range(len(channel_order)))
+        ax.set_yticklabels([channel_labels[ch] for ch in channel_order], fontsize=self.axesticks, fontweight='bold')
+
+        ax.invert_yaxis()
+        ax.set_title('Average Percentage of Total Hate by Channel Type', fontsize=self.fontsize_titles, pad=24)
+
+        for ax, channel in zip(subtopic_axes, channel_order): 
+            channel_data = (df[df['channel_type'] == channel].set_index('label').reindex(categories).reset_index())
+
+            y_positions = list(range(len(categories)))
+            color_rgb = plt.matplotlib.colors.to_rgb(channel_colors[channel])
+
+            for y, (_, row) in zip(y_positions, channel_data.iterrows()):
+
+                ax.barh(y, row['ratio'], height=0.60, facecolor=(*color_rgb, 0.70), edgecolor=(*color_rgb, 1.0), linewidth=2.5, zorder=2)
+
+                sem_val = subtopic_sems.loc[channel, row['label']]
+
+                ax.errorbar(row['ratio'], y, xerr=sem_val, fmt='none', ecolor=channel_colors[channel], capsize=8, capthick=2, zorder=3)
+
+            ax.set_yticks(y_positions)
+            ax.set_yticklabels(channel_data['label'], fontsize=self.axesticks)
+            ax.invert_yaxis()
+            ax.set_title(f' Subtopic Distribution Within {channel_labels[channel]}', fontsize=self.fontsize_titles, pad=24)
+
+        for ax in axes.flat:
+            ax.set_xlim(0, 1)
+            ax.set_xticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda val, _: f'{val * 100:.0f}%'))
+
+            ax.tick_params(axis='x', labelsize=self.axesticks, labelbottom=True, pad=10)
+            ax.tick_params(axis='y', labelsize=self.axesticks, pad=10)
+            ax.set_xlabel('Average Percentage of Total Hate (%)', fontsize=self.fontsize_labels, labelpad=14)
+
+            sns.despine(ax=ax, left=True)
+            ax.margins(x=0.03, y=0.12)
+
+        plt.subplots_adjust(left=0.22, right=0.90, top=0.94, bottom=0.09, wspace=0.42, hspace=0.42)
+
+        fig.savefig('plots/hate_channel_type_ratios_fourPanel.png', dpi=300, bbox_inches='tight', pad_inches=0.50)
+        plt.show()
+
+        return fig
+
+
+
 class Correlation_Matrix:
     def __init__(self):
         self.db = Database(db_path=BASE_DIR/'database/150_db.sqlite3')
@@ -437,7 +538,7 @@ if __name__ == '__main__':
     ratios = target.compute_user_channel_ratios()
     results = target.run_anovas(ratios)
 
-    hate_source_graph = target.plot_channel_ratios(ratios)
+    hate_source_graph = target.plot_channel_ratios_fourPanel(ratios)
     # export_tiff(hate_source_graph)
 
     # cor = Correlation_Matrix()

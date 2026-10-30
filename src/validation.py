@@ -53,9 +53,8 @@ class Validation:
                 y_scores_df: pd.DataFrame = df['probs'].str.split(';', expand=True).astype(float)
                 y_scores_df.columns = self.posLabels
                 y_scores = y_scores_df[label].values
-                
 
-                fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+                fpr, tpr, thresholds = roc_curve(y_true, y_scores, drop_intermediate=False)
                 auc = roc_auc_score(y_true, y_scores)
 
                 ax.plot(fpr, tpr, label=f'df: {dfIdx}, (AUC: {auc:.3f})')
@@ -99,7 +98,6 @@ class Validation:
 
 def perform_validation(variant_names: list[str, ...], classificationType='topic', ground_truth_name: str='val.csv', manual_label_name: str='manual_topic', 
                        posLabels=['News, Politics & Societal Issues', 'Other']):
-
     ground_truth: pd.DataFrame = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{ground_truth_name}")
     merged_dfs = []
 

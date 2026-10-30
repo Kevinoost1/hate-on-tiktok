@@ -50,13 +50,10 @@ class Validation:
 
                 y_true = (df[yTrueColumnName].apply(lambda x: x.strip()) ==  label).astype(int)
 
-                if self.classificationType == 'topic':
-                    y_scores = np.where(df['pred'] == label, df['prob'].astype(float), 1 - df['prob'].astype(float))
-                else:
-                    y_scores_df: pd.DataFrame = df['probs'].str.split(';', expand=True).astype(float)
-                    y_scores_df.columns = self.posLabels
-                    y_scores = y_scores_df[label].values
-                    
+                y_scores_df: pd.DataFrame = df['probs'].str.split(';', expand=True).astype(float)
+                y_scores_df.columns = self.posLabels
+                y_scores = y_scores_df[label].values
+                
 
                 fpr, tpr, thresholds = roc_curve(y_true, y_scores)
                 auc = roc_auc_score(y_true, y_scores)
@@ -108,13 +105,10 @@ def perform_validation(variant_names: list[str, ...], classificationType='topic'
 
     for i, v in enumerate(variant_names):
         df = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{v}")
-
-        if classificationType == 'sent':
-            merged_dfs.append(ground_truth.merge(df, on='video_id', how='inner').iloc[:150, :])
-        else:
-            merged_dfs.append(ground_truth.merge(df, on='video_id', how='inner'))
+        merged_dfs.append(ground_truth.merge(df, on='video_id', how='inner'))
 
     val = Validation(merged_dfs, classificationType=classificationType, posLabels=posLabels)
+
     if classificationType not in ['impoliteness', 'intolerance', 'topic', 'intolerance_test', 'impoliteness_test']:
         val.plot_roc(manual_label_name)
         
@@ -124,37 +118,9 @@ def perform_validation(variant_names: list[str, ...], classificationType='topic'
 
 
 if __name__ == '__main__':
+    perform_validation(variant_names=['top_test_results.csv'], classificationType='topic_test', ground_truth_name='testset_top.csv', manual_label_name='manual_topic')
 
-    perform_validation(variant_names=['val_sent_variant1.csv', 'val_sent_variant2.csv',
-                        'val_sent_variant3.csv', 'val_sent_variant4.csv', 'val_sent_variant5.csv'], classificationType='sent', ground_truth_name='finished_valsets/val.csv', 
-                       manual_label_name='manual_sent', posLabels=['Negative', 'Neutral', 'Positive'])
-
-    perform_validation(variant_names=['val_variant2.csv', 'val_variant3.csv', 'val_variant4.csv', 'val_variant5.csv',
-                         'val_variant6.csv', 'val_variant7.csv', 'val_variant8.csv', 'val_variant9.csv',
-                         'val_variant10.csv', 'val_variant11.csv'], ground_truth_name='finished_valsets/val.csv')
-
-    perform_validation(variant_names=['val_sub_variant0.csv', 'val_sub_variant1.csv'], classificationType='subtopic', ground_truth_name='finished_valsets/sub.csv', 
-                       manual_label_name='manual_subtopic', posLabels=['Political Systems', 'Discrimination', 'Migration',
-                                                                       'Climate', 'Economy & International Relations', 'War & Conflict', 
-                                                                       'Crime', 'Health', 'Digital Media & AI', 'Education', 'Social Policy & Employment', 'Other'])
-
-    perform_validation(variant_names=['val_int_variant0.csv', 'val_int_variant1.csv'], classificationType='intolerance', ground_truth_name='finished_valsets/val_int.csv', manual_label_name='manual_intolerance')
-
-
-    perform_validation(variant_names=['sub_test_results.csv'], classificationType='subtopic_test', ground_truth_name='finished_testsets/testset_sub.csv', 
-    manual_label_name='manual_subtopic', posLabels=['Political Systems', 'Discrimination', 'Migration',
-    'Climate', 'Economy & International Relations', 'War & Conflict', 
-    'Crime', 'Health', 'Digital Media & AI', 'Education', 'Social Policy & Employment', 'Other'])
-
-
-    perform_validation(variant_names=['sent_test_results.csv'], classificationType='sent_test', ground_truth_name='finished_testsets/testset_sent.csv', 
-    manual_label_name='manual_sent', posLabels=['Negative', 'Neutral', 'Positive'])
-
-
-    perform_validation(variant_names=['int_test_results.csv'], classificationType='intolerance_test', ground_truth_name='finished_testsets/testset_int.csv', manual_label_name='manual_intolerance')
-
-
-    perform_validation(variant_names=['imp_test_results.csv'], classificationType='impoliteness_test', ground_truth_name='finished_testsets/testset_imp.csv', manual_label_name='manual_impoliteness')
+    perform_validation(variant_names=['imp_test_results.csv'], classificationType='impoliteness_test', ground_truth_name='testset_imp.csv', manual_label_name='manual_impoliteness')
 
 
 

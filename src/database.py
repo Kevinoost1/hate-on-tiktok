@@ -122,15 +122,4 @@ class Database:
 
 
 if __name__=='__main__':
-    db = Database()
-    
-    conn = sqlite3.connect(BASE_DIR/"database/db.sqlite3")
-    conn.text_factory = bytes
-
-    for rowid, data in conn.execute(
-        "SELECT rowid, translation FROM transcript_classification"
-    ):
-        try:
-            data.decode("utf-8")
-        except UnicodeDecodeError as e:
-            print(f"rowid={rowid}: {e}")
+    pass

@@ -29,18 +29,16 @@ def main():
     stats = Statistics()
 
     dfs: list[pd.DataFrame] = data.request_time_series(get_qs=False, channel_ordering=True)
-    hate_diff_threshold = graphs.create_hate_hist(dfs[0])
 
     politics_t_dfs: list[pd.DataFrame] = [prep.preprocess_epochs(df) for df in dfs]
     politics_t_event_dfs = [df[0] for df in politics_t_dfs]
     politics_t_baseline_dfs = [df[1] for df in politics_t_dfs]
 
     politics_t_plot, data_availability = graphs.create_timeseries_graph(dfs) 
-    hate_source_plot = graphs.create_hate_source_graph(dfs)
 
-    graphs.get_graph_report(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
-    graphs.export_png(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
-    graphs.export_tiff(politics_t_plot, hate_source_plot, data_availability, hate_diff_threshold)
+    graphs.get_graph_report(politics_t_plot, data_availability)
+    graphs.export_png(politics_t_plot, data_availability)
+    graphs.export_tiff(politics_t_plot, data_availability)
 
     stats.get_timeseries(politics_t_event_dfs[0], politics_t_baseline_dfs[0])
     stats.get_hate_source(dfs)
@@ -265,86 +263,7 @@ class Graphs:
             'Government Fall (NL)' : pd.to_datetime('2025-06-03'), 
             '2025 Election (NL)': pd.to_datetime('2025-10-29')
         }
-                
-    def create_hate_hist(self, df) -> plt.Figure:
-        df = df[df[self.topicColumnName] == TOPIC].copy()
-
-        thresholds = [2, 3, 4, 5, 6]
-        proportions = []
-
-        for threshold in thresholds:
-            high_hate = ((df[self.intoleranceColumnName] >= threshold) | (df[self.impolitenessColumnName] >= threshold))
-            user_proportions = (high_hate.groupby(df['user_id']).mean())
-
-            print(f'hate ratio std at threshold {threshold}', high_hate.groupby(df['user_id']).std())
-            print(f'hate ratio max at threshold {threshold}', high_hate.groupby(df['user_id']).max())
-            print(f'hate ratio min at threshold {threshold}', high_hate.groupby(df['user_id']).min())
-
-            proportions.append(user_proportions.mean())
-
-        fig, ax = plt.subplots(figsize=(40, 40))
-        ax.plot(thresholds, proportions, marker='o', linewidth=2, color=self.colors['purple'])
-
-        for threshold, proportion in zip(thresholds, proportions):
-            ax.annotate(f'{proportion:.1%}', (threshold, proportion), xytext=(8, 5), textcoords='offset points', fontsize=self.axesticks)
-
-        ax.set_title('Average Hate Proportion By Chosen Threshold', fontsize=self.fontsize_titles)
-        ax.set_xlabel('Chosen Hate Threshold', fontsize=self.fontsize_labels)
-        ax.set_ylabel('Average Proportion of\nContent Classified Labeled as Hate', fontsize=self.fontsize_labels)
-
-        ax.set_xticks(thresholds)
-        ax.tick_params(axis='both', labelsize=self.axesticks)
-        ax.set_ylim(0, 1)
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0%}'))
-
-        ax.grid(alpha=0.3)
-
-        return fig
-
-    def create_hate_source_graph(self, dfs: list[pd.DataFrame]) -> plt.Figure:
-        preprocessed_dfs = [] 
-
-        for df in dfs:
-            df = df[df['high_hate'] == 1].copy()
-                
-            results: pd.DataFrame = (df.groupby(['user_id', 'official'], as_index=False). agg(
-                n_hate=('high_hate', 'sum')
-            ))
-
-            results['official'] = results['official'].astype(int)
-            results['n_total'] = (results.groupby('user_id')['n_hate'].transform('sum'))
-
-            results['ratio_hate'] = (results['n_hate'] /results['n_total'])
-
-            plot_results = results[
-                results['official'].isin([1, 2])
-            ].copy()
-
-            preprocessed_dfs.append(plot_results)
-
-        results: list[pd.DataFrame] = preprocessed_dfs 
-        fig, axes = plt.subplots(1, 1, figsize=(20,20), sharex=True)
-
-        for i, df in enumerate(results):
-            t = i / max(len(results) - 1, 1)
-            alpha = 0.2 + (1 - 0.2) * t**5
-
-            sns.pointplot(data=df, x="official", y="ratio_hate", estimator="mean", errorbar="se", join=True, markers="o", color=self.colors['purple'], ax=axes, linewidth=1, alpha=alpha)
-        
-        axes.set_title("Average Ratio of Total Hate for Legacy and Alternative\nAcross Multiverse Definitions\n", fontsize=self.fontsize_titles)
-
-        axes.set_ylabel("Average Ratio of Total Hate", fontsize=self.fontsize_labels)
-        axes.set_xticklabels(["Legacy Channels", "Alternative Channels", "Niche Channels"])
-        axes.tick_params(axis='both', labelsize=self.axesticks)
-        axes.spines['top'].set_visible(False)
-        axes.spines['right'].set_visible(False)
-
-        axes.set_xlabel("")
-        
-        plt.show()
-
-        return fig        
-
+         
     def create_timeseries_graph(self, timeSeriesDfs) -> plt.Figure: 
         df: pd.DataFrame = timeSeriesDfs[0].copy()
 
@@ -392,6 +311,9 @@ class Graphs:
         axes[1].set_ylabel('Ratio Hate\nNews in Feed', fontsize=self.fontsize_labels)
         axes[1].set_ylim(0, 0.3)
 
+        for ax, label in zip(axes, "ab"):
+            ax.text(0.02, 0.98, label, transform=ax.transAxes, fontsize=self.fontsize_titles, fontweight='bold', ha="left", va="top",)
+
         for ax in axes:
             ax.tick_params(axis='both', labelsize=self.axesticks)
             ax.spines['top'].set_visible(False)
@@ -427,6 +349,8 @@ class Graphs:
         axes2[1].set_xticks(ticks2)
         axes2[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         axes2[0].set_title("Data Availability 2023-2026\n", fontsize=self.fontsize_titles)
+
+        axes2[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
 
         ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
         axes2[1].set_xticks(ticks)
@@ -502,8 +426,6 @@ class DataExtract:
 
                 def_df.loc[def_df['unique_id'].isin(ordering[str(n)]), 'official'] = 2 
                 feed_data_dfs.append(def_df)
-
-                # assert def_df.loc[def_df['unique_id'] == 'foxnews', 'official'].iloc[0] == (1 if n < 8 else 2)
 
         return feed_data_dfs
 

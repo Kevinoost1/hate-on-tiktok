@@ -120,6 +120,8 @@ if __name__ == '__main__':
 
     perform_validation(variant_names=['imp_test_results.csv'], classificationType='impoliteness_test', ground_truth_name='testset_imp.csv', manual_label_name='manual_impoliteness')
 
+    perform_validation(variant_names=['int_test_results.csv'], classificationType='intolerance_test', ground_truth_name='testset_int.csv', manual_label_name='manual_intolerance')
+
 
 
 

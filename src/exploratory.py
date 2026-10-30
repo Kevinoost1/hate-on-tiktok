@@ -3,7 +3,8 @@ from database import *
 import json
 from pathlib import Path
 import seaborn as sns
-import matplotlib; matplotlib.use('TkAgg'); import matplotlib.pyplot as plt
+import matplotlib; matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from matplotlib.patches import Patch
 from scipy.stats import f_oneway, pearsonr, shapiro, wilcoxon
@@ -13,6 +14,13 @@ import numpy as np
 import zstandard as zstd
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+"""
+A bit of a left-over analysis script. 
+The script consists of code for the dictionary analysis into the subtopics and the graph for creators of hate.
+Moreover, this script contains code for how many (hateful) news videos were from accounts that youth followed
+"""
 
 
 class Hate_Speech_Target:
@@ -139,109 +147,6 @@ class Hate_Speech_Target:
 
         return channels['official'], channels['unofficial'], channels['ordering']
 
-    def plot_channel_ratios(self, ratios):
-        channel_colors = {1: '#001157', 2: '#b03aa3', 3: '#ec8e3a'}
-        channel_labels = {1: 'Legacy', 2: 'Alternative', 3: 'Niche'}
-        channel_order = [1, 2, 3]
-
-        categories = list(self.keywords.keys())
-        subtopic_cols = list(self.keywords.keys())
-
-        user_avg = ratios.groupby(['user_id', 'channel_type'])[subtopic_cols + ['channel_ratio']].mean()
-        channel_df = user_avg.groupby('channel_type').mean().reset_index()
-
-        channel_sems = user_avg['channel_ratio'].groupby(
-            user_avg.index.get_level_values('channel_type')).sem()
-
-        subtopic_contributions = user_avg[subtopic_cols].copy()
-        for col in subtopic_cols:
-            subtopic_contributions[col] = subtopic_contributions[col] * user_avg['channel_ratio']
-
-        subtopic_sems = subtopic_contributions.groupby(
-            subtopic_contributions.index.get_level_values('channel_type')).sem()
-
-
-        subtopic_df = (user_avg[subtopic_cols].groupby(user_avg.index.get_level_values('channel_type')).mean().reset_index().melt(id_vars='channel_type', var_name='label', value_name='ratio'))
-
-        rows = []
-
-        for channel in channel_order:
-            ch_df = channel_df[channel_df['channel_type'] == channel]
-            channel_ratio = ch_df['channel_ratio'].values[0]
-            total_subtopics = ch_df[subtopic_cols].sum(axis=1).values[0]
-
-            for cat in categories:
-                original = ch_df[cat].values[0]
-                ratio = (original / total_subtopics) if total_subtopics > 0 and channel_ratio > 0 else 0
-                rows.append({"label": cat, "channel_type": channel, "ratio": ratio, "original_ratio": original})
-
-        df = pd.DataFrame(rows)
-
-        y_positions, current_y, channel_positions = [], 0, {}
-        for channel in channel_order:
-            start = current_y
-            for _ in range(len(categories)):
-                y_positions.append(current_y)
-
-                current_y += 1
-            channel_positions[channel] = (start, current_y - 1)
-            current_y += 1.8
-
-        fig, ax = plt.subplots(figsize=(40, 26))
-
-        channel_bar_values = {}
-        for channel, (start, end) in channel_positions.items():
-
-            midpoint = (start + end) / 2
-            ch_ratio = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
-            channel_bar_values[channel] = ch_ratio
-            ax.barh(midpoint, ch_ratio, height=(end - start) + 1.50, facecolor=(*plt.matplotlib.colors.to_rgb(channel_colors[channel]), 0.14), zorder=0, 
-                        edgecolor=(*plt.matplotlib.colors.to_rgb(channel_colors[channel]), 0.45), linewidth=2)
-            ax.errorbar(ch_ratio, midpoint, xerr=channel_sems[channel], fmt='none',
-                        ecolor=channel_colors[channel], capsize=8, capthick=2, zorder=1)
-
-        for y, (_, row) in zip(y_positions, df.iterrows()):
-
-            ax.barh(y, row["ratio"], color=channel_colors[row["channel_type"]], height=0.60, zorder=2, alpha=0.9)
-            sem_val = subtopic_sems.loc[row["channel_type"], row["label"]]
-            ax.errorbar(row["ratio"], y, xerr=sem_val, fmt='none',
-                        ecolor=channel_colors[row["channel_type"]], capsize=8, capthick=2, zorder=3, alpha=0.9)
-
-
-        ax.figure.canvas.draw()
-        renderer = ax.figure.canvas.get_renderer()
-
-        for channel, (start, end) in channel_positions.items():
-            midpoint = (start + end) / 2
-            ch_ratio = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
-            label = ax.text(0.75, midpoint - 1, channel_labels[channel], transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="bold")
-
-            ext = label.get_window_extent(renderer=renderer)
-            pt_to_data_x = 1.0 / (ax.transData.transform([[1, 0]])[0][0] - ax.transData.transform([[0, 0]])[0][0])
-            ax.text(0.80 + ext.width * pt_to_data_x + 0.025, midpoint - 1, f"{ch_ratio*100:.1f}%", transform=ax.transData, ha="left", va="center", fontsize=self.axesticks, fontweight="normal")
-
-        ax.set_xticks(MaxNLocator(nbins=10).tick_values(0, 1))
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda val, _: f"{val*100:.0f}%"))
-        ax.set_yticks(y_positions)
-        ax.set_yticklabels(df["label"], fontsize=self.axesticks)
-        ax.invert_yaxis()
-
-        ax.set_xlabel("\nAverage Percentage of Total Hate (%)", fontsize=self.fontsize_labels)
-        ax.set_title("\nAverage Percentage of Total Hate by Channel Type,\n Broken Up by Subtopic", fontsize=self.fontsize_titles, pad=18)
-        ax.tick_params(axis="x", labelsize=self.axesticks)
-
-        sns.despine(left=True)
-        ax.set_xlim(0, 1)
-
-        ax.legend(handles=[Patch(color=channel_colors[ch], label=channel_labels[ch]) for ch in channel_order], loc='lower right', fontsize=self.axesticks, frameon=False)
-        plt.subplots_adjust(left=0.28, right=0.95, top=0.88, bottom=0.15)
-
-        fig.savefig("plots/hate_channel_type_ratios.png", dpi=300, bbox_inches="tight", pad_inches=0.25)
-        plt.show()
-        return fig
-
-
-
     def plot_channel_ratios_fourPanel(self, ratios):
         channel_colors = {1: '#001157', 2: '#b03aa3', 3: '#ec8e3a'}
         channel_labels = {1: 'Legacy', 2: 'Alternative', 3: 'Niche'}
@@ -274,7 +179,7 @@ class Hate_Speech_Target:
                 rows.append({'label': cat, 'channel_type': channel, 'ratio': original, 'original_ratio': original})
 
         df = pd.DataFrame(rows)
-        fig, axes = plt.subplots(2, 2, figsize=(40, 28), sharex=True)
+        fig, axes = plt.subplots(2, 2, figsize=(40, 20), sharex=True)
 
         ax_channel = axes[0, 0]
         subtopic_axes = [
@@ -299,10 +204,10 @@ class Hate_Speech_Target:
         ax.set_yticklabels([channel_labels[ch] for ch in channel_order], fontsize=self.axesticks, fontweight='bold')
 
         ax.invert_yaxis()
-        ax.set_title('Average Percentage of Total Hate by Channel Type', fontsize=self.fontsize_titles, pad=24)
+        ax.set_title('Average Percentage of Total Hate by Account Type', fontsize=self.fontsize_titles, pad=24)
 
-        for ax, channel in zip(subtopic_axes, channel_order): 
-            channel_data = (df[df['channel_type'] == channel].set_index('label').reindex(categories).reset_index())
+        for ax, channel in zip(subtopic_axes, channel_order):
+            channel_data = (df[df['channel_type'] == channel].set_index('label').reindex(categories).reset_index().sort_values('ratio', ascending=False).reset_index(drop=True))            
 
             y_positions = list(range(len(categories)))
             color_rgb = plt.matplotlib.colors.to_rgb(channel_colors[channel])
@@ -333,7 +238,10 @@ class Hate_Speech_Target:
             sns.despine(ax=ax, left=True)
             ax.margins(x=0.03, y=0.12)
 
-        plt.subplots_adjust(left=0.18, right=0.96, top=0.94, bottom=0.09, wspace=0.80, hspace=0.65)
+        for ax, label in zip(axes.flat, "abcd"):
+                    ax.text(0.98, 0.98, label, transform=ax.transAxes, fontsize=self.fontsize_titles, fontweight='bold', ha="left", va="top",)
+
+        plt.subplots_adjust(left=0.15, right=0.96, top=0.94, bottom=0.09, wspace=0.80, hspace=0.55)
 
         fig.canvas.draw()
         fig.savefig('plots/hate_channel_type_ratios_fourPanel.png', dpi=300)
@@ -341,67 +249,9 @@ class Hate_Speech_Target:
 
         return fig
 
-
     def export_tiff(self, *figs: tuple[plt.Figure], custom_label='hateSource') -> None:
         for i, fig in enumerate(figs):
             fig.savefig(f'plots/{custom_label}_{i}.tiff', format='tiff', dpi=600)
-
-
-
-
-
-class Correlation_Matrix:
-    def __init__(self):
-        self.db = Database(db_path=BASE_DIR/'database/150_db.sqlite3')
-        self.colors = {'dark_blue': '#001157', 'orange': '#ec8e3a', 'green': '#4F8B4C', 'purple': '#b03aa3', 'brown': '#d67f2d'}
-
-        self.fontsize_labels: int = 30
-        self.fontsize_titles: int = 36
-        self.axesticks: int = 26
-
-    def get_data(self) -> pd.DataFrame:
-        q_items = ['id', 'age', 'political_preference', 'dimi1_compulsion1', 'future_anxiety_1', 'future_anxiety_2', 'future_anxiety_3',
-                      'future_anxiety_4', 'future_anxiety_5', 'sr_hate_speech', 'affective_pol', 'future_anxiety_total', 'dimi_compulsion_total', 
-                      'dimi_choice_total', 'boredom_total', 'skills_self_control_total', 'skills_misinformation_total',
-                        'dimi2_compulsion2', 'dimi3_compulsion3', 'dimi4_choice1','dimi5_choice2', 'dimi6_choice3', 'skills1_self_control1',
-                        'skills2_self_control2', 'skills3_self_control3', 'skills4_misinformation1', 'skills5_misinformation2',
-                        'skills6_misinformation3', 'boredom1', 'boredom2', 'boredom3', 'news_1', 'news_3', 'news_4_1',
-                        'news_4_2', 'ipsos_statements_1', 'ipsos_statements_2', 'ipsos_statements_3', 'ipsos_statements_4',
-                        'ipsos_statements_5', 'ipsos_statements_6', 'ipsos_statements_7', 'ipsos_statements_8', 'ipsos_statements_1_opinion_extreme', 
-                        'ipsos_statements_2_opinion_extreme', 'ipsos_statements_3_opinion_extreme', 'ipsos_statements_4_opinion_extreme',
-                        'ipsos_statements_5_opinion_extreme', 'ipsos_statements_6_opinion_extreme', 'ipsos_statements_7_opinion_extreme', 'ipsos_statements_8_opinion_extreme']
-
-        query = f"""
-        SELECT user_id, hate_ratio, news_ratio {', '.join(q for q in q_items)}
-        FROM(
-            SELECT AVG(
-                CASE WHEN tc.intolerance >= 5 OR tc.impoliteness >= 5 THEN 1
-                WHEN tc.topic != 'News, Politics & Societal Issues' THEN NULL
-                ELSE 0
-            END) AS hate_ratio,
-            AVG(
-                CASE WHEN tc.topic='News, Politics & Societal Issues' THEN 1
-                ELSE 0
-            END) AS news_ratio, e.user_id AS user_id
-            FROM engagements e
-            LEFT JOIN transcript_classification tc ON e.video_id=tc.video_id
-            WHERE tc.topic IS NOT NULL AND e.user_id NOT IN (119, 132)
-            GROUP BY e.user_id
-        )
-        LEFT JOIN questionnaires q ON q.id=user_id;
-        """
-
-        with self.db.connect() as db:
-            df = pd.read_sql(query, db)
-
-        return df
-
-    def specific_cor(self, df: pd.DataFrame):
-        df = df[['hate_ratio', 'sr_hate_speech']].dropna()
-        r, p = pearsonr(df['hate_ratio'], df['sr_hate_speech'])
-
-        print('r', r)
-        print('p', p)
 
 
 class Cross_Ref_Followers():
@@ -475,7 +325,6 @@ class Cross_Ref_Followers():
         diffs = valid['is_following_ratio'] - valid['not_following_ratio']
         shapiro_stat, shapiro_p = shapiro(diffs)
 
-        print("=== Wilcoxon signed-rank test ===")
         print(f"Median is_following_ratio:     {valid['is_following_ratio'].median():.5f}")
         print(f"Max is_following_ratio:     {valid['is_following_ratio'].max():.5f}")
         print(f"Min is_following_ratio:     {valid['is_following_ratio'].min():.5f}")
@@ -486,7 +335,7 @@ class Cross_Ref_Followers():
 
         print(f"V-statistic:                 {stat:.4f}")
         print(f"p-value:                     {p_val:.4f}")
-        print(f"\n=== Normality of differences (Shapiro-Wilk) ===")
+
         print(f"Statistic: {shapiro_stat:.4f}, p-value: {shapiro_p:.4f}")
 
         self.plot_ratio_histogram(valid)
@@ -544,21 +393,17 @@ if __name__ == '__main__':
     hate_source_graph = target.plot_channel_ratios_fourPanel(ratios)
     target.export_tiff(hate_source_graph)
 
-    # cor = Correlation_Matrix()
-    # df = cor.get_data()
-    # cor.specific_cor(df)
+    fol = Cross_Ref_Followers()
+    user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
+    user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    fol.compute_ratios_channel_types(user_engagements)
+    per_user = fol.compute_ratios(user_engagements)
+    fol.execute_wilcoxon_test(per_user)
 
-    # fol = Cross_Ref_Followers()
-    # user_engagements = fol.get_engagements(analysis='tc.topic = "News, Politics & Societal Issues"')
-    # user_engagements = fol.merge_following_vs_non_following(user_engagements)
-    # fol.compute_ratios_channel_types(user_engagements)
-    # per_user = fol.compute_ratios(user_engagements)
-    # fol.execute_wilcoxon_test(per_user)
-
-    # user_engagements = fol.get_engagements(analysis='tc.impoliteness >= 5 OR tc.intolerance >= 5')
-    # user_engagements = fol.merge_following_vs_non_following(user_engagements)
-    # per_user = fol.compute_ratios(user_engagements)
-# fol.execute_wilcoxon_test(per_user)
+    user_engagements = fol.get_engagements(analysis='tc.impoliteness >= 5 OR tc.intolerance >= 5')
+    user_engagements = fol.merge_following_vs_non_following(user_engagements)
+    per_user = fol.compute_ratios(user_engagements)
+    fol.execute_wilcoxon_test(per_user)
 
 
 

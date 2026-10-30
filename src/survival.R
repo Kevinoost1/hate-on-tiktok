@@ -83,12 +83,8 @@ write_results <- function(ml_cox_fit){
   write.csv(results, 'survival_results.csv', row.names = FALSE)
 }
 
-
-# Load and Edit the Data
 df <- define_event(load_data())
 
-
-# Fit the actual Model
 ml_cox_fit_topic <- ml_cox_randomint(df, 'topic')
 ml_cox_fit_hate <- ml_cox_randomint(df, 'high_hate')
 write_results(ml_cox_fit_topic)
@@ -101,7 +97,6 @@ ci <- cbind(
 )
 print(ci)
 
-# -----------------------------------------------------
 
 
 

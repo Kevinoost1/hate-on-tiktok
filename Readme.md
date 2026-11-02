@@ -5,7 +5,7 @@ Even though the research paper makes use of a .sqlite3 database, the code is mad
 As you can find in the paper the pipeline itself consists of the following steps:
 1. preprocess.py -> Preprocessing, translating, and filtering 
 2. classify.py -> Few-shot classification
-3. analysis.py -> Downstream analyses and graphs
+3. Downstream analyses and graphs: analysis.py (get_data, timeseries, and stats), survival.R (survival model), hate_source.R (multilevel model for hate creators), graph.py (exposure graph), and exploratory.py (dictionary analysis and hate creators graph)
 
 The pipeline is supported by two seperate parts:
 1. database.py -> contains generic methods for extracting specific data from the .sqlite3 database

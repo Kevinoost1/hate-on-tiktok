@@ -1,3 +1,4 @@
+
 import pandas as pd
 from sklearn.metrics import roc_curve, roc_auc_score, classification_report, root_mean_squared_error
 from sklearn.preprocessing import LabelEncoder
@@ -99,10 +100,14 @@ class Validation:
 def perform_validation(variant_names: list[str, ...], classificationType='topic', ground_truth_name: str='val.csv', manual_label_name: str='manual_topic', 
                        posLabels=['News, Politics & Societal Issues', 'Other']):
     ground_truth: pd.DataFrame = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{ground_truth_name}")
+    ground_truth = ground_truth.drop_duplicates(subset='video_id', keep='first')
+
     merged_dfs = []
 
     for i, v in enumerate(variant_names):
         df = pd.read_csv(f"/home/kevin/Documents/phd/Project-Data-Donation/testset/{v}")
+        df = df.drop_duplicates(subset='video_id', keep='first')
+
         merged_dfs.append(ground_truth.merge(df, on='video_id', how='inner'))
 
     val = Validation(merged_dfs, classificationType=classificationType, posLabels=posLabels)
@@ -113,15 +118,12 @@ def perform_validation(variant_names: list[str, ...], classificationType='topic'
     val.get_classification_report(yTrueColumnName=manual_label_name, yPredColumnName='pred')
 
 
-
-
 if __name__ == '__main__':
-    perform_validation(variant_names=['top_test_results.csv'], classificationType='topic_test', ground_truth_name='testset_top.csv', manual_label_name='manual_topic')
+    perform_validation(variant_names=['top_test_results.csv'], classificationType='topic_test', ground_truth_name='finished_testsets/testset_top.csv', manual_label_name='manual_topic')
 
-    perform_validation(variant_names=['imp_test_results.csv'], classificationType='impoliteness_test', ground_truth_name='testset_imp.csv', manual_label_name='manual_impoliteness')
+    perform_validation(variant_names=['imp_test_results.csv'], classificationType='impoliteness_test', ground_truth_name='finished_testsets/testset_imp.csv', manual_label_name='manual_impoliteness')
 
-    perform_validation(variant_names=['int_test_results.csv'], classificationType='intolerance_test', ground_truth_name='testset_int.csv', manual_label_name='manual_intolerance')
-
+    perform_validation(variant_names=['int_test_results.csv'], classificationType='intolerance_test', ground_truth_name='finished_testsets/testset_int.csv', manual_label_name='manual_intolerance')
 
 
 

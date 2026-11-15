@@ -297,15 +297,16 @@ class Graphs:
         legend = []
         for label, date in self.political_events.items():
             for i, plot in enumerate(axes):
+                date = pd.Timestamp(date)
                 axes[i].axvline(date, linestyle='--', color=self.colors['green'], alpha=0.8)
-                axes[i].axvspan(date - pd.Timedelta(days=14), date + pd.Timedelta(days=3), color=self.colors['green'], alpha=0.08)
+                axes[i].axvspan(mdates.date2num(date - pd.Timedelta(days=14)), mdates.date2num(date + pd.Timedelta(days=3)), color=self.colors['green'], alpha=0.08)
 
             axes[1].text(date, -0.1, label, rotation=45, ha='right', va='top', fontsize=self.axesticks, color=self.colors['green'], transform=axes[1].get_xaxis_transform())
 
         axes[0].set_ylabel('Ratio News in Feed', fontsize=27)
         axes[0].set_title("Exposure to News, Politics & Societal Issues Content and Hate over Time\n", fontsize=self.fontsize_titles)
 
-        axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
+        axes[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-05-05'))
         axes[0].set_ylim(0, 0.3)
 
         axes[1].set_ylabel('Ratio Hate\nNews in Feed', fontsize=self.fontsize_labels)
@@ -319,7 +320,9 @@ class Graphs:
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
 
-        ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
+        ticks = pd.date_range(start='2023-10-01', end='2026-05-01', freq='9MS')
+
+        ticks = ticks.union(pd.DatetimeIndex([pd.Timestamp('2023-10-01'), pd.Timestamp('2026-05-05')]))
         axes[1].set_xticks(ticks)
         axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
 
@@ -345,14 +348,15 @@ class Graphs:
         for ax in axes2:
             ax.tick_params(axis='both', labelsize=self.axesticks)
 
-        ticks2 = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
+        ticks2 = pd.date_range(start='2023-10-01', end='2026-05-05', freq='9MS')
         axes2[1].set_xticks(ticks2)
         axes2[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         axes2[0].set_title("Data Availability 2023-2026\n", fontsize=self.fontsize_titles)
 
-        axes2[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-01-01'))
+        axes2[0].set_xlim(pd.to_datetime('2023-10-01'), pd.to_datetime('2026-05-01'))
 
-        ticks = pd.date_range(start='2023-10-01', end='2026-01-01', freq='9MS')
+        ticks = pd.date_range(start='2023-10-01', end='2026-05-05', freq='9MS')
+        ticks = ticks.union(pd.DatetimeIndex([pd.Timestamp('2023-10-01'), pd.Timestamp('2026-05-05')]))
         axes2[1].set_xticks(ticks)
         axes2[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
 
@@ -397,7 +401,7 @@ class DataExtract:
         feed_data: pd.DataFrame = self.database.retrieve_data(tableName='engagements e LEFT JOIN videos v ON e.video_id=v.id LEFT JOIN transcript_classification tc ON tc.video_id=e.video_id', 
                                                               colNames=['tc.video_id', f'tc.{self.topicColumnName}', f'tc.{self.sentColumnName}', 
                                                                         f'tc.{self.intoleranceColumnName}', f'tc.{self.impolitenessColumnName}', 'tc.video_duration', 'v.author_id', 'e.user_id', 'e.date_ymd', 'e.time_hms'], 
-                                                              restrictions='e.user_id NOT IN (119, 132)') # participant 119 was excluded due to being to old (age 30), 132 was excluded due to having donated only one video from 2020
+                                                              restrictions='e.user_id NOT IN (119, 132, 112, 147, 151) AND e.date_ymd >= "2023-10-01"') # participant 119 was excluded due to being to old (age 30), 132 was excluded due to having donated only one video from 2020, the rest had no classified videos in that timeframe
 
         feed_data = self.format_time(feed_data)
         feed_data = feed_data[feed_data['topic'].notna()]

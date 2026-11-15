@@ -1,3 +1,4 @@
+
 import pandas as pd
 from database import *
 import json
@@ -37,16 +38,20 @@ class Hate_Speech_Target:
 
         self.data = db.retrieve_data(
             tableName='engagements e LEFT JOIN transcript_classification tc ON e.video_id = tc.video_id LEFT JOIN videos v ON tc.video_id = v.id LEFT JOIN authors a ON a.id=v.author_id',
-            colNames=['e.user_id', 'tc.translation', 'v.desc', 'unique_id'], restrictions='(tc.impoliteness >= 5 OR tc.intolerance >= 5) AND e.user_id NOT IN (119, 132)')
+            colNames=['e.user_id', 'tc.translation', 'v.desc', 'a.unique_id'], restrictions='(tc.impoliteness >= 5 OR tc.intolerance >= 5) AND (e.user_id NOT IN (119, 132, 112, 147, 151) AND e.date_ymd >= "2023-10-01")')
+
+        self.data_news = db.retrieve_data(tableName='engagements e LEFT JOIN transcript_classification tc ON e.video_id=tc.video_id LEFT JOIN videos v ON tc.video_id=v.id LEFT JOIN authors a ON a.id=v.author_id',
+                                          colNames=['e.user_id', 'tc.translation', 'v.desc', 'a.unique_id'], restrictions='(tc.topic = "News, Politics & Societal Issues") AND (e.user_id NOT IN (119, 132, 112, 147, 151) AND e.date_ymd >= "2023-10-01")')
 
         official, unofficial, ordering = self.load_channels()
 
-        self.data['channel_type'] = np.select([self.data['unique_id'].isin(official), self.data['unique_id'].isin(unofficial)], [1, 2], default=3)
-        self.data.loc[self.data['unique_id'].isin(ordering[str(66)]), 'channel_type'] = 2
+        for data in [self.data, self.data_news]:
+            data['channel_type'] = np.select([data['unique_id'].isin(official), data['unique_id'].isin(unofficial)], [1, 2], default=3)
+            data.loc[data['unique_id'].isin(ordering[str(66)]), 'channel_type'] = 2
 
-        self.data['translation'] = self.data['translation'].fillna("").astype(str)
-        self.data['desc'] = self.data['desc'].fillna("").astype(str)
-        self.data['text'] = self.data['translation'] + " " + self.data['desc']
+            data['translation'] = data['translation'].fillna("").astype(str)
+            data['desc'] = data['desc'].fillna("").astype(str)
+            data['text'] = data['translation'] + " " + data['desc']
 
     def _match_keywords(self, text, keywords):
         text_lower = text.lower()
@@ -55,17 +60,17 @@ class Hate_Speech_Target:
                 return 1
         return 0
 
-    def add_keyword_columns(self):
+    def add_keyword_columns(self, data):
         for subtopic, keywords in self.keywords.items():
-            self.data[subtopic] = self.data['text'].apply(lambda text: self._match_keywords(text, keywords))
+            data[subtopic] = data['text'].apply(lambda text: self._match_keywords(text, keywords))
 
-    def compute_user_channel_ratios(self):
-        grouped = self.data.groupby(['user_id', 'channel_type']).agg(transcript_count=('user_id', 'size'),
+    def compute_user_channel_ratios(self, data):
+        grouped = data.groupby(['user_id', 'channel_type']).agg(transcript_count=('user_id', 'size'),
             **{subtopic: (subtopic, 'sum') for subtopic in self.keywords.keys()}).reset_index()
 
         all_users = grouped['user_id'].unique()
 
-        channel_types = self.data['channel_type'].unique()
+        channel_types = data['channel_type'].unique()
         index = pd.MultiIndex.from_product([all_users, channel_types], names=['user_id', 'channel_type'])
         grouped = grouped.set_index(['user_id', 'channel_type']).reindex(index).reset_index()
 
@@ -147,7 +152,8 @@ class Hate_Speech_Target:
 
         return channels['official'], channels['unofficial'], channels['ordering']
 
-    def plot_channel_ratios_fourPanel(self, ratios):
+    def plot_channel_ratios_fourPanel(self, ratios, analysis='Hate'):
+        channel_colors_2 = {1: '#c8dca0', 2: '#83AFCB', 3: '#d070c8'}
         channel_colors = {1: '#001157', 2: '#b03aa3', 3: '#ec8e3a'}
         channel_labels = {1: 'Legacy', 2: 'Alternative', 3: 'Niche'}
         channel_order = [1, 2, 3]
@@ -192,10 +198,10 @@ class Hate_Speech_Target:
         for y, channel in enumerate(channel_order):
             value = channel_df.loc[channel_df['channel_type'] == channel, 'channel_ratio'].values[0]
 
-            color_rgb = plt.matplotlib.colors.to_rgb(channel_colors[channel])
+            color_rgb = plt.matplotlib.colors.to_rgb(channel_colors_2[channel])
 
             ax.barh(y, value, height=0.60, facecolor=(*color_rgb, 1.0), edgecolor=(*color_rgb, 1.0), linewidth=1.5, zorder=2)
-            ax.errorbar(value, y, xerr=channel_sems[channel], fmt='none', ecolor=channel_colors[channel], capsize=8, capthick=2, zorder=3)
+            ax.errorbar(value, y, xerr=channel_sems[channel], fmt='none', ecolor=channel_colors_2[channel], capsize=8, capthick=2, zorder=3)
 
             ax.annotate(f'{value * 100:.2f}%', xy=(value + 0.05, y), xytext=(8, 0), textcoords='offset points', ha='left', va='center', 
                         fontsize=self.axesticks, clip_on=False)
@@ -204,13 +210,13 @@ class Hate_Speech_Target:
         ax.set_yticklabels([channel_labels[ch] for ch in channel_order], fontsize=self.axesticks, fontweight='bold')
 
         ax.invert_yaxis()
-        ax.set_title('Average Percentage of Total Hate by Account Type', fontsize=self.fontsize_titles, pad=24)
+        ax.set_title(f'Average Percentage of Total {analysis} by Account Type', fontsize=self.fontsize_titles, pad=24)
 
         for ax, channel in zip(subtopic_axes, channel_order):
             channel_data = (df[df['channel_type'] == channel].set_index('label').reindex(categories).reset_index().sort_values('ratio', ascending=False).reset_index(drop=True))            
 
             y_positions = list(range(len(categories)))
-            color_rgb = plt.matplotlib.colors.to_rgb(channel_colors[channel])
+            color_rgb = plt.matplotlib.colors.to_rgb(channel_colors_2[channel])
 
             for y, (_, row) in zip(y_positions, channel_data.iterrows()):
 
@@ -218,7 +224,7 @@ class Hate_Speech_Target:
 
                 sem_val = subtopic_sems.loc[channel, row['label']]
 
-                ax.errorbar(row['ratio'], y, xerr=sem_val, fmt='none', ecolor=channel_colors[channel], capsize=8, capthick=2, zorder=3)
+                ax.errorbar(row['ratio'], y, xerr=sem_val, fmt='none', ecolor=channel_colors_2[channel], capsize=8, capthick=2, zorder=3)
 
             ax.set_yticks(y_positions)
             ax.set_yticklabels(channel_data['label'], fontsize=self.axesticks)
@@ -233,7 +239,7 @@ class Hate_Speech_Target:
 
             ax.tick_params(axis='x', labelsize=self.axesticks, labelbottom=True, pad=10)
             ax.tick_params(axis='y', labelsize=self.axesticks, pad=10)
-            ax.set_xlabel('Average Percentage of Total Hate (%)', fontsize=self.fontsize_labels, labelpad=14)
+            ax.set_xlabel(f'Average Percentage of Total {analysis} (%)', fontsize=self.fontsize_labels, labelpad=14)
 
             sns.despine(ax=ax, left=True)
             ax.margins(x=0.03, y=0.12)
@@ -244,7 +250,7 @@ class Hate_Speech_Target:
         plt.subplots_adjust(left=0.15, right=0.96, top=0.94, bottom=0.09, wspace=0.80, hspace=0.55)
 
         fig.canvas.draw()
-        fig.savefig('plots/hate_channel_type_ratios_fourPanel.png', dpi=300)
+        fig.savefig(f'plots/{analysis}_channel_type_ratios_fourPanel.png', dpi=300)
         plt.show()
 
         return fig
@@ -282,7 +288,7 @@ class Cross_Ref_Followers():
         LEFT JOIN authors a ON a.id = v.author_id
         LEFT JOIN transcript_classification tc ON tc.video_id = e.video_id
         LEFT JOIN users u ON u.id = e.user_id
-        WHERE ({analysis}) AND e.user_id NOT IN (119, 132)
+        WHERE ({analysis}) AND (e.user_id NOT IN (119, 132, 112, 147, 151) AND e.date_ymd >= "2023-10-01")
         GROUP BY e.user_id, a.unique_id
         ORDER BY e.user_id, video_count DESC;
         """
@@ -293,6 +299,7 @@ class Cross_Ref_Followers():
         return df
 
     def compute_ratios(self, user_engagements): 
+        user_engagements.to_csv('user_engagements.csv')
         df = user_engagements.groupby('user_id').agg(
             video_count_is_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 1, 'video_count'].sum()),
             video_count_not_following=('video_count', lambda x: user_engagements.loc[x.index].loc[user_engagements.loc[x.index, 'is_following'] == 0, 'video_count'].sum()),
@@ -326,10 +333,12 @@ class Cross_Ref_Followers():
         shapiro_stat, shapiro_p = shapiro(diffs)
 
         print(f"Median is_following_ratio:     {valid['is_following_ratio'].median():.5f}")
+        print(f'IQR is_following_ratio:        {valid['is_following_ratio'].quantile(0.75) - valid['is_following_ratio'].quantile(0.25)}')
         print(f"Max is_following_ratio:     {valid['is_following_ratio'].max():.5f}")
         print(f"Min is_following_ratio:     {valid['is_following_ratio'].min():.5f}")
 
         print(f"Median not_following_ratio:    {valid['not_following_ratio'].median():.5f}")
+        print(f'IQR not_following_ratio:        {valid['not_following_ratio'].quantile(0.75) - valid['not_following_ratio'].quantile(0.25)}')
         print(f"Max not_following_ratio:     {valid['not_following_ratio'].max():.5f}")
         print(f"Min not_following_ratio:     {valid['not_following_ratio'].min():.5f}")
 
@@ -385,12 +394,12 @@ class Cross_Ref_Followers():
 if __name__ == '__main__':
     target = Hate_Speech_Target()
     target.get_hate_speech()
-    target.add_keyword_columns()
+    target.add_keyword_columns(data=target.data)
 
-    ratios = target.compute_user_channel_ratios()
+    ratios = target.compute_user_channel_ratios(data=target.data)
     results = target.run_anovas(ratios)
 
-    hate_source_graph = target.plot_channel_ratios_fourPanel(ratios)
+    hate_source_graph = target.plot_channel_ratios_fourPanel(ratios, analysis='Hate')
     target.export_tiff(hate_source_graph)
 
     fol = Cross_Ref_Followers()
@@ -404,7 +413,5 @@ if __name__ == '__main__':
     user_engagements = fol.merge_following_vs_non_following(user_engagements)
     per_user = fol.compute_ratios(user_engagements)
     fol.execute_wilcoxon_test(per_user)
-
-
 
 

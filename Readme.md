@@ -80,11 +80,9 @@ The method will then take id.csv and merge to results to it.
 
 It contains an assert clause to trigger and halt the code when id.csv and transcripts.txt are not of the same length. This can indicate the something went wrong and the transcripts are likely not aligned to their original ids. 
 
-*To see this entire pipeline in action, check the classify.slurm script. This is a bash script that runs the classification on a HPC*
-
 # Downstream analyses and graphs
-This is the longest, and probably most difficult script to read. This is because it contains all seperate analyses used in the study, but also the graph code. 
-It is seperated into different classes that all do a different part. 
+These are the longest, and probably most difficult scripts to read. This is because the analysis and plotting scripts (analysis.py, graph.py, and exploratory.py) contain all the seperate analyses used in the study, but also the graph code that changed quite a bit towards the end. 
+Analysis contains every statistical analysis in Python and all call to R whenever R was needed. It is seperated into different classes that all do a different part. 
 
 **DataFrame retrieval -> DataExtract()**
 This class returns a timeseries dataframe with full feeds from the database. You can skip this class if you don't use a .sqlite3 database. 
@@ -112,4 +110,12 @@ All of this information is also in the paper in clearer format.
 As with the graphs, each of the three major analyses have a function in Statistics(). There is also a function for getting the descriptives
 
 In every case it returns the results in the form of a dictionary. However, running the dump_to_json() function just takes all of these dictionaries, puts them with their right analysis and saves a 'stats.json' with every single important output. So you can just run every analysis once and check out the results in one file.
+
+## graph.py
+Graph.py is probably the ugliest script you have ever layed eyes on. However, it's only purpose was to create two graphs for exposure to hate and news (Figure 1 and 2 from the paper). 
+It does not contain any logic that does something new but just makes a nice looking plot of what we already have.
+
+## exploratory.py
+exploratory.py contains two seperate things: first, in contains the code for the dictionary analysis done to investigate which actors were mentioned in the hate transcripts. The file src/keywords3.json contains all the words and categories used in the dictionary classification. Second, it contains code for the amount of news/hate content that originated from a user's followed accounts. 
+It then plots the hate dictionary analysis together with the amount of hate divided by account type (Figure 3)
 
